@@ -1,4 +1,4 @@
-import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ConflictException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { randomUUID } from 'node:crypto';
 import {
   generateOccurrences,
@@ -14,6 +14,15 @@ import { EmailService } from '../notifications/email.service';
 import { bySlovakName } from '../members/members.service';
 import { canManageTeam, coachBlockedFromTeam, coachTeamIds, isDemoScope, isStaff } from '../auth/scope';
 import type { AuthUser } from '../auth/current-user.decorator';
+
+/** Tréning iného družstva na rovnakej ploche v rovnakom čase. */
+interface SharedClash {
+  teamId: string;
+  teamName: string;
+  title: string;
+  startAt: Date;
+  endAt: Date | null;
+}
 
 /** Spoločné pripojenia pri načítaní udalostí (družstvo, zápas, cieľové družstvá). */
 const EVENT_INCLUDE = {
@@ -142,27 +151,97 @@ export class EventsService {
     if (endAt.getTime() <= startAt.getTime()) throw new BadRequestException('Koniec musí byť po začiatku');
   }
 
-  /** Odmietne rezerváciu, ak sa plocha v danom čase už používa (bez koncového času sa počíta 90 min). */
-  private async assertPitchFree(pitchId: string, slots: Array<{ startAt: Date; endAt?: Date | null }>, excludeId?: string) {
+  /**
+   * Overí, či je plocha v danom čase voľná (bez koncového času sa počíta 90 min).
+   * Prekryv s tréningom iného družstva pri tréningu sa dá potvrdiť (`allowShared`) — inak 409
+   * so zoznamom družstiev; ostatné prekryvy (zápas, nezdieľateľné) sa odmietnu vždy.
+   * Vráti tréningy, s ktorými sa plocha zdieľa.
+   */
+  private async assertPitchFree(
+    pitchId: string,
+    slots: Array<{ startAt: Date; endAt?: Date | null }>,
+    opts: { excludeId?: string; shareable?: boolean; allowShared?: boolean } = {},
+  ): Promise<SharedClash[]> {
     const DEFAULT_MS = 90 * 60_000;
     const range = slots.map((s) => ({ s: s.startAt.getTime(), e: (s.endAt ?? new Date(s.startAt.getTime() + DEFAULT_MS)).getTime() }));
     const from = new Date(Math.min(...range.map((r) => r.s)) - 24 * 3600_000);
     const to = new Date(Math.max(...range.map((r) => r.e)));
     const existing = await this.prisma.event.findMany({
-      where: { pitchId, id: excludeId ? { not: excludeId } : undefined, startAt: { gte: from, lt: to } },
-      select: { title: true, startAt: true, endAt: true },
+      where: { pitchId, id: opts.excludeId ? { not: opts.excludeId } : undefined, startAt: { gte: from, lt: to } },
+      select: { id: true, type: true, teamId: true, team: { select: { name: true } }, title: true, startAt: true, endAt: true },
     });
+    const clashes = new Map<string, (typeof existing)[number]>();
     for (const r of range) {
-      const clash = existing.find((x) => {
+      for (const x of existing) {
         const xs = x.startAt.getTime();
         const xe = (x.endAt ?? new Date(xs + DEFAULT_MS)).getTime();
-        return xs < r.e && xe > r.s;
-      });
-      if (clash) {
-        throw new BadRequestException(
-          `Plocha je v tom čase obsadená (${clash.title}, ${formatEventDateTimeSk(clash.startAt)})`,
-        );
+        if (xs < r.e && xe > r.s) clashes.set(x.id, x);
       }
+    }
+    if (clashes.size === 0) return [];
+    const list = [...clashes.values()].sort((a, b) => a.startAt.getTime() - b.startAt.getTime());
+    const sharable = opts.shareable && list.every((c) => c.type === 'TRAINING' && c.teamId);
+    if (!sharable) {
+      const c = list[0]!;
+      throw new BadRequestException(`Plocha je v tom čase obsadená (${c.title}, ${formatEventDateTimeSk(c.startAt)})`);
+    }
+    const result: SharedClash[] = list.map((c) => ({
+      teamId: c.teamId!,
+      teamName: c.team?.name ?? c.title,
+      title: c.title,
+      startAt: c.startAt,
+      endAt: c.endAt,
+    }));
+    if (!opts.allowShared) {
+      const names = [...new Set(result.map((c) => c.teamName))];
+      throw new ConflictException({
+        statusCode: 409,
+        code: 'PITCH_SHARED',
+        message: `V tom čase je plocha rezervovaná pre: ${names.join(', ')}. Chcete ju napriek tomu rezervovať?`,
+        conflicts: result.slice(0, 20).map((c) => ({
+          teamName: c.teamName,
+          title: c.title,
+          startAt: c.startAt.toISOString(),
+          endAt: c.endAt ? c.endAt.toISOString() : null,
+        })),
+      });
+    }
+    return result;
+  }
+
+  /** Tréneri družstiev, ktoré už mali plochu rezervovanú, dostanú info o ďalšom družstve na ploche. */
+  private async notifySharedPitch(
+    clashes: SharedClash[],
+    pitchName: string,
+    newTeamIds: string[],
+    slots: Array<{ startAt: Date; endAt?: Date | null }>,
+  ) {
+    if (clashes.length === 0) return;
+    const newTeams = await this.prisma.team.findMany({ where: { id: { in: newTeamIds } }, select: { name: true } });
+    const teamIds = [...new Set(clashes.map((c) => c.teamId))].filter((id) => !newTeamIds.includes(id));
+    if (teamIds.length === 0) return;
+    const coaches = await this.prisma.userRole.findMany({
+      where: { role: 'COACH', teamId: { in: teamIds } },
+      select: { teamId: true, user: { select: { email: true } } },
+    });
+    const esc = (v: string) => v.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    const range = (a: Date, b?: Date | null) => formatEventDateTimeSk(a) + (b ? `–${formatEventTimeSk(b)}` : '');
+    const when = slots.slice(0, 10).map((s) => esc(range(s.startAt, s.endAt))).join('<br>') + (slots.length > 10 ? `<br>… (+${slots.length - 10})` : '');
+    const names = newTeams.map((t) => t.name).join(', ');
+    const sent = new Set<string>();
+    for (const c of coaches) {
+      const to = c.user.email?.trim().toLowerCase();
+      if (!to || sent.has(to)) continue;
+      sent.add(to);
+      const own = clashes.find((x) => x.teamId === c.teamId);
+      const html = `
+      <div style="font-family:Arial,Helvetica,sans-serif;color:#16223c">
+        <h2 style="color:#1a2848">Na vašej ploche trénuje aj ďalšie družstvo</h2>
+        <p>Plocha <strong>${esc(pitchName)}</strong>, ktorú má vaše družstvo${own ? ` (${esc(own.teamName)})` : ''} rezervovanú, bola rezervovaná aj pre: <strong>${esc(names)}</strong>.</p>
+        <p style="margin:10px 0">${when}</p>
+        <p><a href="https://fkknv.sk/prihlasenie" style="display:inline-block;background:#2b4278;color:#fff;padding:10px 18px;border-radius:6px;text-decoration:none">Otvoriť portál</a></p>
+      </div>`;
+      await this.email.send([to], `Plocha ${pitchName} — tréning aj pre ${names}`, html);
     }
   }
 
@@ -216,12 +295,14 @@ export class EventsService {
     for (const id of ids) await this.resolveTeam(id);
     const pitch = await this.resolvePitch(input.pitchId);
     this.assertEndAfterStart(input.startAt, input.endAt, !!pitch);
-    if (pitch) await this.assertPitchFree(pitch.id, [{ startAt: input.startAt, endAt: input.endAt }]);
+    const slots = [{ startAt: input.startAt, endAt: input.endAt }];
+    const clashes = pitch ? await this.assertPitchFree(pitch.id, slots, { shareable: true, allowShared: input.allowSharedPitch }) : [];
     let first;
     for (const id of ids) {
       const ev = await this.createOne({ ...input, teamId: id, teamIds: undefined }, createdById, isDemo, true);
       first ??= ev;
     }
+    if (pitch) void this.notifySharedPitch(clashes, pitch.name, ids, slots).catch(() => undefined);
     return first;
   }
 
@@ -232,9 +313,12 @@ export class EventsService {
     const isMatch = input.type === 'MATCH' || input.type === 'TOURNAMENT';
     const pitch = await this.resolvePitch(input.pitchId);
     this.assertEndAfterStart(input.startAt, input.endAt, !!pitch);
-    if (pitch && !skipPitchCheck) {
-      await this.assertPitchFree(pitch.id, [{ startAt: input.startAt, endAt: input.endAt }]);
-    }
+    const slots = [{ startAt: input.startAt, endAt: input.endAt }];
+    // zdieľanie plochy sa ponúka len pri tréningu; zápas pri obsadenej ploche odmietnuť
+    const clashes =
+      pitch && !skipPitchCheck
+        ? await this.assertPitchFree(pitch.id, slots, { shareable: input.type === 'TRAINING', allowShared: input.allowSharedPitch })
+        : [];
 
     // logo súpera z registra klubov + doplnenie nového súpera do registra
     let opponentLogo: string | null = null;
@@ -278,6 +362,7 @@ export class EventsService {
     if (input.type === 'TRAINING' && team) {
       await this.prepareAttendance(event.id, team.id, season.id);
     }
+    if (pitch && team && clashes.length > 0) void this.notifySharedPitch(clashes, pitch.name, [team.id], slots).catch(() => undefined);
     return event;
   }
 
@@ -292,14 +377,14 @@ export class EventsService {
     let created = 0;
     let recurrenceGroupId = '';
     for (const [i, id] of ids.entries()) {
-      const r = await this.createRecurringOne({ ...input, teamId: id, teamIds: undefined }, createdById, isDemo, i > 0);
+      const r = await this.createRecurringOne({ ...input, teamId: id, teamIds: undefined }, createdById, isDemo, i > 0, ids);
       created += r.created;
       recurrenceGroupId ||= r.recurrenceGroupId;
     }
     return { recurrenceGroupId, created };
   }
 
-  private async createRecurringOne(input: CreateRecurringTrainingInput, createdById: string, isDemo = false, skipPitchCheck = false) {
+  private async createRecurringOne(input: CreateRecurringTrainingInput, createdById: string, isDemo = false, skipPitchCheck = false, groupTeamIds?: string[]) {
     const season = await this.prisma.season.findFirst({ where: { isActive: true } });
     if (!season) throw new BadRequestException('Neexistuje aktívna sezóna');
     const team = await this.resolveTeam(input.teamId);
@@ -318,7 +403,10 @@ export class EventsService {
     const pitch = await this.resolvePitch(input.pitchId);
     if (pitch && !input.endTime) throw new BadRequestException('Pri vybranej hracej ploche zadajte koniec');
     for (const occ of occurrences) this.assertEndAfterStart(occ.startAt, occ.endAt, !!pitch);
-    if (pitch && !skipPitchCheck) await this.assertPitchFree(pitch.id, occurrences);
+    const clashes =
+      pitch && !skipPitchCheck
+        ? await this.assertPitchFree(pitch.id, occurrences, { shareable: true, allowShared: input.allowSharedPitch })
+        : [];
     const recurrenceGroupId = randomUUID();
 
     for (const occ of occurrences) {
@@ -342,6 +430,7 @@ export class EventsService {
       });
       await this.prepareAttendance(event.id, team.id, season.id);
     }
+    if (pitch && clashes.length > 0) void this.notifySharedPitch(clashes, pitch.name, groupTeamIds ?? [team.id], occurrences).catch(() => undefined);
     return { recurrenceGroupId, created: occurrences.length };
   }
 
@@ -359,7 +448,15 @@ export class EventsService {
     }
     this.assertEndAfterStart(newStart, newEnd, !!effectivePitchId && (input.endAt !== undefined || input.pitchId !== undefined));
     if (effectivePitchId) {
-      await this.assertPitchFree(effectivePitchId, [{ startAt: newStart, endAt: newEnd }], eventId);
+      const clashes = await this.assertPitchFree(effectivePitchId, [{ startAt: newStart, endAt: newEnd }], {
+        excludeId: eventId,
+        shareable: event.type === 'TRAINING',
+        allowShared: input.allowSharedPitch,
+      });
+      if (clashes.length > 0 && event.teamId) {
+        const p = pitch ?? (await this.prisma.pitch.findUnique({ where: { id: effectivePitchId } }));
+        if (p) void this.notifySharedPitch(clashes, p.name, [event.teamId], [{ startAt: newStart, endAt: newEnd }]).catch(() => undefined);
+      }
     }
     const updated = await this.prisma.event.update({
       where: { id: eventId },

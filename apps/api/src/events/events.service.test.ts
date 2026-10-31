@@ -56,3 +56,39 @@ describe('adresa udalosti s plochou', () => {
     expect(prisma.event.create.mock.calls[0]![0].data.address).toBe('X 1');
   });
 });
+
+describe('zdieľanie plochy medzi tréningami', () => {
+  const clash = (type: string) => ({
+    id: 'x1', type, teamId: 't9', team: { name: 'U11' }, title: 'Tréning U11',
+    startAt: new Date('2030-01-01T10:30:00Z'), endAt: new Date('2030-01-01T11:30:00Z'),
+  });
+  const training = { ...base, type: 'TRAINING' as const };
+
+  it('tréning na obsadenej ploche vráti 409 s družstvami', async () => {
+    const { service, prisma } = make();
+    prisma.event.findMany.mockResolvedValue([clash('TRAINING')] as never);
+    await expect(service.create(training as never, 'u1')).rejects.toMatchObject({ status: 409 });
+    expect(prisma.event.create).not.toHaveBeenCalled();
+  });
+
+  it('s allowSharedPitch sa tréning vytvorí', async () => {
+    const { service, prisma } = make();
+    prisma.event.findMany.mockResolvedValue([clash('TRAINING')] as never);
+    (prisma as never as { userRole: unknown }).userRole = { findMany: vi.fn(async () => []) };
+    (prisma as never as { team: unknown }).team = { findUnique: vi.fn(async () => null), findMany: vi.fn(async () => []) };
+    await service.create({ ...training, allowSharedPitch: true } as never, 'u1');
+    expect(prisma.event.create).toHaveBeenCalled();
+  });
+
+  it('zápas na obsadenej ploche sa vždy odmietne (400)', async () => {
+    const { service, prisma } = make();
+    prisma.event.findMany.mockResolvedValue([clash('TRAINING')] as never);
+    await expect(service.create({ ...base, type: 'MATCH', allowSharedPitch: true } as never, 'u1')).rejects.toMatchObject({ status: 400 });
+  });
+
+  it('tréning cez zápas sa neponúka (400)', async () => {
+    const { service, prisma } = make();
+    prisma.event.findMany.mockResolvedValue([clash('MATCH')] as never);
+    await expect(service.create({ ...training, allowSharedPitch: true } as never, 'u1')).rejects.toMatchObject({ status: 400 });
+  });
+});

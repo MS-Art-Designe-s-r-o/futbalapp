@@ -13,7 +13,7 @@ import {
   type SurfaceCode,
 } from '@fkknv/shared';
 import { categoryColor, eventTypeColor } from '@/lib/colors';
-import { api } from '@/lib/api';
+import { api, ApiError } from '@/lib/api';
 import { canManage, canManageTeam, coachTeams, isStaff, useMe, type Me } from '@/lib/auth';
 import { Button, Card, ErrorText, Modal, inputCls, labelCls } from '@/components/ui';
 
@@ -858,6 +858,7 @@ function TrainingModal({
   const [until, setUntil] = useState('');
   const [date, setDate] = useState('');
   const [isPublic, setIsPublic] = useState(false);
+  const [shared, setShared] = useState<{ message: string; conflicts: Array<{ teamName: string; title: string; startAt: string; endAt: string | null }> } | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -885,16 +886,17 @@ function TrainingModal({
     setWeekdays((prev) => (prev.includes(d) ? prev.filter((x) => x !== d) : [...prev, d]));
   }
 
-  async function submit() {
+  async function submit(allowSharedPitch = false) {
     if (endInvalid) return setError('Koniec musí byť po začiatku');
     if (endMissing) return setError('Pri vybranej hracej ploche zadajte koniec');
     setBusy(true);
     setError(null);
+    setShared(null);
     try {
       if (recurring) {
         await api('/events/recurring', {
           method: 'POST',
-          body: JSON.stringify({ title, teamId, teamIds, weekdays, startTime, endTime, from, until, ...placeFields(pitchId, location, surface), isPublic, address: address.trim() || undefined }),
+          body: JSON.stringify({ title, teamId, teamIds, weekdays, startTime, endTime, from, until, ...placeFields(pitchId, location, surface), isPublic, allowSharedPitch, address: address.trim() || undefined }),
         });
       } else {
         await api('/events', {
@@ -908,12 +910,17 @@ function TrainingModal({
             endAt: endTime ? `${date}T${endTime}:00.000Z` : undefined,
             ...placeFields(pitchId, location, surface),
             isPublic,
+            allowSharedPitch,
             address: address.trim() || undefined,
           }),
         });
       }
       onDone();
     } catch (e) {
+      if (e instanceof ApiError && e.body.code === 'PITCH_SHARED') {
+        setShared({ message: e.message, conflicts: e.body.conflicts ?? [] });
+        return;
+      }
       setError(e instanceof Error ? e.message : 'Uloženie zlyhalo');
     } finally {
       setBusy(false);
@@ -1008,11 +1015,33 @@ function TrainingModal({
         </label>
 
         <ErrorText>{error}</ErrorText>
+        {shared && (
+          <div className="rounded border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">
+            <p className="font-medium">{shared.message}</p>
+            <ul className="mt-1 list-disc pl-5">
+              {shared.conflicts.slice(0, 5).map((c, i) => (
+                <li key={i}>
+                  {c.teamName} — {c.title}, {new Date(c.startAt).toLocaleString('sk-SK', { timeZone: 'UTC', dateStyle: 'short', timeStyle: 'short' })}
+                </li>
+              ))}
+              {shared.conflicts.length > 5 && <li>… a ďalšie ({shared.conflicts.length - 5})</li>}
+            </ul>
+            <p className="mt-1">Tréner družstva, ktoré už plochu má, dostane e-mail o ďalšom družstve.</p>
+            <div className="mt-2 flex gap-2">
+              <Button variant="ghost" onClick={() => setShared(null)}>
+                Späť
+              </Button>
+              <Button onClick={() => submit(true)} disabled={busy}>
+                Napriek tomu rezervovať
+              </Button>
+            </div>
+          </div>
+        )}
         <div className="flex justify-end gap-2">
           <Button variant="ghost" onClick={onClose}>
             Zrušiť
           </Button>
-          <Button onClick={submit} disabled={busy || !teamId || endInvalid || endMissing}>
+          <Button onClick={() => submit()} disabled={busy || !!shared || !teamId || endInvalid || endMissing}>
             {busy ? 'Ukladám…' : recurring ? 'Vytvoriť sériu' : 'Vytvoriť'}
           </Button>
         </div>

@@ -143,6 +143,8 @@ export const createEventSchema = z.object({
   jerseyColor: z.enum(['DARK', 'LIGHT']).optional(),
   /// zobraziť v kalendári na verejnom webe (platí len pre TRAINING)
   isPublic: z.boolean().optional(),
+  /// tréning: potvrdené, že plochu zdieľa s iným tréningom v rovnakom čase (zápas sa nikdy nezdieľa)
+  allowSharedPitch: z.boolean().optional(),
 });
 export type CreateEventInput = z.infer<typeof createEventSchema>;
 
@@ -170,6 +172,8 @@ export const createRecurringTrainingSchema = z.object({
   pitchId: z.string().optional(),
   /// zobraziť v kalendári na verejnom webe
   isPublic: z.boolean().optional(),
+  /// potvrdené, že plochu zdieľa s iným tréningom v rovnakom čase
+  allowSharedPitch: z.boolean().optional(),
 });
 export type CreateRecurringTrainingInput = z.infer<typeof createRecurringTrainingSchema>;
 

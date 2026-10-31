@@ -10,6 +10,17 @@ export function setToken(token: string | null) {
   else window.localStorage.removeItem('fkknv_token');
 }
 
+/** Chyba API s telom odpovede (napr. `code: 'PITCH_SHARED'` pri zdieľaní plochy). */
+export class ApiError extends Error {
+  constructor(
+    message: string,
+    public status: number,
+    public body: { code?: string; conflicts?: Array<{ teamName: string; title: string; startAt: string; endAt: string | null }> },
+  ) {
+    super(message);
+  }
+}
+
 export async function api<T>(path: string, options: RequestInit = {}): Promise<T> {
   const token = getToken();
   const response = await fetch(`${API_URL}${path}`, {
@@ -26,7 +37,7 @@ export async function api<T>(path: string, options: RequestInit = {}): Promise<T
   }
   if (!response.ok) {
     const body = await response.json().catch(() => ({}));
-    throw new Error(body.message ?? `Chyba servera (${response.status})`);
+    throw new ApiError(body.message ?? `Chyba servera (${response.status})`, response.status, body);
   }
   return response.json() as Promise<T>;
 }
