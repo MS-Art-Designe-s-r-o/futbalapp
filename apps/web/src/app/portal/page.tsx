@@ -225,7 +225,7 @@ function EventList({ title, events }: { title: string; events: EventItem[] }) {
       ) : (
         <ul className="border border-club-100 bg-white">
           {events.map((e) => {
-            const href = e.match ? `/portal/zapasy/${e.match.id}` : `/portal/dochadzka/${e.id}`;
+            const href = e.match ? `/portal/zapasy/${e.match.id}` : e.type === 'TOURNAMENT' ? `/portal/turnaje/${e.id}` : `/portal/dochadzka/${e.id}`;
             const c = categoryColor(e.team?.teamCategory?.code);
             // čas udalosti je vedený ako UTC „nástenný" čas
             const d = new Date(e.startAt);

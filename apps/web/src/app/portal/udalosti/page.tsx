@@ -16,6 +16,7 @@ import { categoryColor, eventTypeColor } from '@/lib/colors';
 import { api, ApiError } from '@/lib/api';
 import { canManage, canManageTeam, coachTeams, isStaff, useMe, type Me } from '@/lib/auth';
 import { Button, Card, ErrorText, Modal, inputCls, labelCls } from '@/components/ui';
+import { ClubPicker } from '@/components/club-picker';
 
 interface Team {
   id: string;
@@ -48,7 +49,11 @@ interface EventItem {
   recurrenceGroupId: string | null;
   team: { id: string; name: string; teamCategory: { code: string } } | null;
   audienceTeams?: Array<{ id: string; name: string }>;
+  parentEventId?: string | null;
+  parent?: { id: string; title: string } | null;
+  tournamentOrder?: number | null;
   match: {
+    isFriendly?: boolean;
     id: string;
     state: string;
     scoreUs: number | null;
@@ -84,9 +89,21 @@ const typeLabels: Record<string, string> = {
  * detail (všetky info sú na karte).
  */
 function eventHref(me: Me | null, e: EventItem): string | null {
+  if (e.type === 'TOURNAMENT') return `/portal/turnaje/${e.id}`;
   if (e.match) return `/portal/zapasy/${e.match.id}`;
   if (e.type === 'PARENT_MEETING') return null;
   return canManageTeam(me, e.team?.id) ? `/portal/dochadzka/${e.id}` : null;
+}
+
+/** Štítok turnajového/priateľského zápasu. */
+function extraBadges(e: EventItem, tournamentTitles: Map<string, string>): string[] {
+  const out: string[] = [];
+  if (e.parentEventId || e.parent) {
+    const title = e.parent?.title ?? (e.parentEventId ? tournamentTitles.get(e.parentEventId) : undefined) ?? '';
+    out.push(`Turnaj: ${title}${e.tournamentOrder != null ? ` · ${e.tournamentOrder}. zápas` : ''}`.replace('Turnaj: ·', 'Turnaj ·'));
+  }
+  if (e.match?.isFriendly) out.push('Priateľský');
+  return out;
 }
 
 /** Kompaktný názov družstva pre kalendár (úspora miesta, bez medzier): „U 13 A" → „U13A". */
@@ -267,6 +284,11 @@ export default function EventsPage() {
     void load();
   }, [load]);
 
+  const tournamentTitles = useMemo(
+    () => new Map(events.filter((e) => e.type === 'TOURNAMENT').map((e) => [e.id, e.title] as const)),
+    [events],
+  );
+
   const grouped = useMemo(() => {
     const now = Date.now();
     return {
@@ -374,8 +396,8 @@ export default function EventsPage() {
 
       {view === 'list' ? (
         <>
-          <EventList me={me} nominated={nominatedMatchIds} title="Najbližšie" events={grouped.upcoming} empty="Žiadne naplánované udalosti." />
-          {grouped.past.length > 0 && <EventList me={me} nominated={nominatedMatchIds} title="Odohrané" events={grouped.past.slice(0, 20)} empty="" />}
+          <EventList tournamentTitles={tournamentTitles} me={me} nominated={nominatedMatchIds} title="Najbližšie" events={grouped.upcoming} empty="Žiadne naplánované udalosti." />
+          {grouped.past.length > 0 && <EventList tournamentTitles={tournamentTitles} me={me} nominated={nominatedMatchIds} title="Odohrané" events={grouped.past.slice(0, 20)} empty="" />}
         </>
       ) : (
         <MonthView
@@ -443,12 +465,14 @@ export default function EventsPage() {
 }
 
 function EventList({
+  tournamentTitles,
   me,
   nominated,
   title,
   events,
   empty,
 }: {
+  tournamentTitles: Map<string, string>;
   me: Me | null;
   nominated: Set<string>;
   title: string;
@@ -467,6 +491,7 @@ function EventList({
             const c = eventTypeColor(e.type);
             const audience = audienceLabel(e);
             const isNominated = !!e.match && nominated.has(e.match.id);
+            const badges = extraBadges(e, tournamentTitles);
             const body = (
               <>
                 <span
@@ -477,6 +502,11 @@ function EventList({
                   {e.team ? ` · ${compactTeam(e.team.name)}` : ''}
                   {e.recurrenceGroupId ? ' · séria' : ''}
                 </span>
+                {badges.map((b) => (
+                  <span key={b} className="ml-2 inline-block rounded bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-800">
+                    {b}
+                  </span>
+                ))}
                 {isNominated && (
                   <span className="ml-2 inline-block rounded bg-green-100 px-2 py-0.5 text-xs font-medium text-green-700">
                     Nominovaný
@@ -649,7 +679,7 @@ function MonthView({
                           e.match
                             ? `${e.team ? `${compactTeam(e.team.name)} ` : ''}⚽ ${e.match.opponent}`
                             : `${e.team ? `${compactTeam(e.team.name)} ` : ''}${typeLabels[e.type] ?? e.type}`
-                        }${isNominated ? ' ✓' : ''}`;
+                        }${e.match?.isFriendly ? ' (prát.)' : ''}${isNominated ? ' ✓' : ''}`;
                         const jersey =
                           e.match?.jerseyColor ? (
                             <JerseyIcon
@@ -1050,6 +1080,13 @@ function TrainingModal({
   );
 }
 
+interface ClubItem {
+  id: string;
+  name: string;
+  logoUrl: string | null;
+}
+
+
 function MatchModal({
   open,
   initialDate,
@@ -1067,8 +1104,11 @@ function MatchModal({
 }) {
   const [pitchId, setPitchId] = useState('');
   const [teamId, setTeamId] = useState('');
-  const [type, setType] = useState<'MATCH' | 'TOURNAMENT'>('MATCH');
+  const [type, setType] = useState<'MATCH' | 'FRIENDLY' | 'TOURNAMENT'>('MATCH');
   const [opponent, setOpponent] = useState('');
+  const [tournamentTitle, setTournamentTitle] = useState('');
+  const [clubs, setClubs] = useState<ClubItem[]>([]);
+  const [participants, setParticipants] = useState<string[]>([]);
   const [isHome, setIsHome] = useState(true);
   const [jerseyColor, setJerseyColor] = useState<'' | 'DARK' | 'LIGHT'>('');
   const [date, setDate] = useState('');
@@ -1083,7 +1123,7 @@ function MatchModal({
   // predvolený koniec = začiatok + dĺžka podľa kategórie družstva / typu
   const catCode = teams.find((t) => t.id === teamId)?.teamCategory.code;
   useEffect(() => {
-    if (time) setEndTime(addMinutesToHhmm(time, defaultEventMinutes(type, catCode)));
+    if (time) setEndTime(addMinutesToHhmm(time, defaultEventMinutes(type === 'TOURNAMENT' ? 'TOURNAMENT' : 'MATCH', catCode)));
   }, [time, type, catCode]);
   const usePitch = isHome && !!pitchId;
   const endInvalid = !!time && !!endTime && endTime <= time;
@@ -1098,6 +1138,11 @@ function MatchModal({
   useEffect(() => {
     if (open && initialDate) setDate(initialDate);
   }, [open, initialDate]);
+  useEffect(() => {
+    if (open && type === 'TOURNAMENT' && clubs.length === 0) {
+      api<ClubItem[]>('/clubs').then(setClubs).catch(() => {});
+    }
+  }, [open, type, clubs.length]);
 
   async function submit() {
     if (endInvalid) return setError('Koniec musí byť po začiatku');
@@ -1106,10 +1151,29 @@ function MatchModal({
     setError(null);
     try {
       const team = teams.find((t) => t.id === teamId);
+      const body =
+        type === 'TOURNAMENT'
+          ? {
+              type: 'TOURNAMENT',
+              title: tournamentTitle.trim() || `Turnaj ${team?.name ?? ''}`.trim(),
+              teamId,
+              startAt: `${date}T${time}:00.000Z`,
+              endAt: endTime ? `${date}T${endTime}:00.000Z` : undefined,
+              ...placeFields(isHome ? pitchId : '', location, surface),
+              address: address.trim() || undefined,
+              participants,
+            }
+          : null;
+      if (body) {
+        await api('/events', { method: 'POST', body: JSON.stringify(body) });
+        onDone();
+        return;
+      }
       await api('/events', {
         method: 'POST',
         body: JSON.stringify({
-          type,
+          type: 'MATCH',
+          friendly: type === 'FRIENDLY' ? true : undefined,
           title: isHome ? `${team?.name} vs ${opponent}` : `${opponent} vs ${team?.name}`,
           teamId,
           startAt: `${date}T${time}:00.000Z`,
@@ -1145,8 +1209,9 @@ function MatchModal({
         <div className="grid grid-cols-2 gap-3">
           <div>
             <label className={labelCls}>Typ</label>
-            <select value={type} onChange={(e) => setType(e.target.value as 'MATCH' | 'TOURNAMENT')} className={inputCls}>
-              <option value="MATCH">Zápas</option>
+            <select value={type} onChange={(e) => setType(e.target.value as 'MATCH' | 'FRIENDLY' | 'TOURNAMENT')} className={inputCls}>
+              <option value="MATCH">Zápas (SFZ)</option>
+              <option value="FRIENDLY">Priateľský zápas (mimo SFZ)</option>
               <option value="TOURNAMENT">Turnaj</option>
             </select>
           </div>
@@ -1158,10 +1223,26 @@ function MatchModal({
             </select>
           </div>
         </div>
-        <div>
-          <label className={labelCls}>Súper</label>
-          <input value={opponent} onChange={(e) => setOpponent(e.target.value)} className={inputCls} list="opponent-list" />
-        </div>
+        {type === 'TOURNAMENT' ? (
+          <>
+            <div>
+              <label className={labelCls}>Názov turnaja</label>
+              <input value={tournamentTitle} onChange={(e) => setTournamentTitle(e.target.value)} className={inputCls} placeholder="napr. Jarný turnaj" />
+            </div>
+            <ClubPicker clubs={clubs} selected={participants} onChange={setParticipants} />
+          </>
+        ) : (
+          <div>
+            <label className={labelCls}>Súper</label>
+            <input value={opponent} onChange={(e) => setOpponent(e.target.value)} className={inputCls} list="opponent-list" />
+            {type === 'FRIENDLY' && (
+              <p className="mt-1 text-xs text-gray-500">
+                Priateľský zápas nie je súčasťou SFZ – synchronizácia s futbalnetom ho neovplyvní.
+              </p>
+            )}
+          </div>
+        )}
+        {type !== 'TOURNAMENT' && (
         <div>
           <label className={labelCls}>Dres</label>
           <div className="flex gap-2">
@@ -1183,6 +1264,7 @@ function MatchModal({
             ))}
           </div>
         </div>
+        )}
         <div className="grid grid-cols-3 gap-3">
           <div>
             <label className={labelCls}>Dátum</label>
@@ -1207,7 +1289,7 @@ function MatchModal({
           <Button variant="ghost" onClick={onClose}>
             Zrušiť
           </Button>
-          <Button onClick={submit} disabled={busy || !teamId || !opponent || !date || endInvalid || endMissing}>
+          <Button onClick={submit} disabled={busy || !teamId || (type !== 'TOURNAMENT' && !opponent) || !date || endInvalid || endMissing}>
             {busy ? 'Ukladám…' : 'Vytvoriť'}
           </Button>
         </div>

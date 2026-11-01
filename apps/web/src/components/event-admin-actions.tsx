@@ -34,7 +34,7 @@ export function EventAdminActions({
   eventId: string;
   startAt: string;
   endAt?: string | null;
-  kind: 'match' | 'training';
+  kind: 'match' | 'training' | 'tournament';
   title?: string;
   location?: string | null;
   address?: string | null;
@@ -67,8 +67,8 @@ export function EventAdminActions({
     }
   }, [moveOpen, venues.length]);
 
-  const label = kind === 'match' ? 'zápas' : 'tréning';
-  const canReschedule = kind === 'training' || matchState === 'PLANNED';
+  const label = kind === 'match' ? 'zápas' : kind === 'tournament' ? 'turnaj' : 'tréning';
+  const canReschedule = kind !== 'match' || matchState === 'PLANNED';
   const canCancel = kind === 'match' && matchState === 'PLANNED';
 
   const endInvalid = !!time && !!endTime && endTime <= time;
@@ -242,7 +242,9 @@ export function EventAdminActions({
           <p className="text-sm text-gray-600">
             {kind === 'match'
               ? 'Natrvalo odstrániť tento zápas vrátane nominácie a zápisu? Túto akciu nie je možné vrátiť.'
-              : recurrenceGroupId
+              : kind === 'tournament'
+                ? 'Natrvalo odstrániť tento turnaj vrátane všetkých jeho zápasov, nominácií a zápisov? Túto akciu nie je možné vrátiť.'
+                : recurrenceGroupId
                 ? 'Tento tréning je súčasťou opakovanej série. Odstrániť len tento termín, alebo aj všetky budúce? Vrátane dochádzky, nedá sa vrátiť.'
                 : 'Natrvalo odstrániť tento tréning vrátane dochádzky? Túto akciu nie je možné vrátiť.'}
           </p>

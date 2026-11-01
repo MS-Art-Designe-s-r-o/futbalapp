@@ -51,6 +51,7 @@ interface MatchDetail {
   meetAt: string | null;
   notes: string | null;
   jerseyColor: 'DARK' | 'LIGHT' | null;
+  isFriendly?: boolean;
   videoUrl: string | null;
   highlightsUrl: string | null;
   halfLengthMin?: number;
@@ -69,6 +70,9 @@ interface MatchDetail {
     location: string | null;
     address: string | null;
     futbalnetId?: string | null;
+    friendly?: boolean;
+    parent?: { id: string; title: string } | null;
+    tournamentOrder?: number | null;
     surface: SurfaceCode | null;
     team: { id: string; name: string } | null;
   };
@@ -573,8 +577,21 @@ export default function MatchPage({ params }: { params: Promise<{ id: string }> 
       <Link href="/portal/udalosti" className="text-sm text-club-600 hover:underline">
         ← Kalendár
       </Link>
+      {match.event.parent && (
+        <div>
+          <Link href={`/portal/turnaje/${match.event.parent.id}`} className="text-sm font-medium text-club-700 hover:underline">
+            ← Turnaj: {match.event.parent.title}
+            {match.event.tournamentOrder != null ? ` (${match.event.tournamentOrder}. zápas)` : ''}
+          </Link>
+        </div>
+      )}
 
       <Card className="text-center">
+        {(match.isFriendly || match.event.friendly) && (
+          <p className="mb-1">
+            <span className="inline-block rounded bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-800">Priateľský zápas</span>
+          </p>
+        )}
         <div className="mb-1 flex items-center justify-center gap-4">
           {/* poradie log podľa doma/vonku: doma = my vľavo, vonku = my vpravo */}
           {/* eslint-disable @next/next/no-img-element */}
