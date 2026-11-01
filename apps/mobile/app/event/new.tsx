@@ -41,8 +41,7 @@ export default function NewEventScreen() {
   const [opponent, setOpponent] = useState('');
   const [isHome, setIsHome] = useState(true);
   const [friendly, setFriendly] = useState(false);
-  const [jerseyColor, setJerseyColor] = useState<'DARK' | 'LIGHT' | null>(null);
-  const [oppJersey, setOppJersey] = useState<'DARK' | 'LIGHT' | null>(null);
+  const [jerseyColor, setJerseyColor] = useState<('DARK' | 'LIGHT')[]>([]);
   const [busy, setBusy] = useState(false);
   const [pitches, setPitches] = useState<Pitch[]>([]);
   const [pitchId, setPitchId] = useState('');
@@ -171,8 +170,7 @@ export default function NewEventScreen() {
             opponent,
             isHome,
             friendly: friendly || undefined,
-            jerseyColor: jerseyColor || undefined,
-            opponentJerseyColor: oppJersey || undefined,
+            jerseyColors: jerseyColor,
           }),
         });
       }
@@ -337,8 +335,7 @@ export default function NewEventScreen() {
           </View>
           <Text style={styles.label}>Súper</Text>
           <TextInput {...inputProps} style={styles.input} value={opponent} onChangeText={setOpponent} />
-          <JerseyPicker label="Náš dres" value={jerseyColor} onChange={setJerseyColor} />
-          <JerseyPicker label="Dres súpera" value={oppJersey} onChange={setOppJersey} />
+          <JerseyPicker label="Dres nášho mužstva" value={jerseyColor} onChange={setJerseyColor} />
           <Text style={styles.label}>Dátum (RRRR-MM-DD)</Text>
           <TextInput {...inputProps} style={styles.input} value={date} onChangeText={setDate} placeholder="2026-09-12" />
           <View style={styles.row}>

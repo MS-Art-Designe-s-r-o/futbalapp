@@ -5,7 +5,7 @@ import { formatEventDateTimeSk } from '@fkknv/shared';
 import { api } from '@/api';
 import { canManageTeam, fetchMe, type Me } from '@/auth';
 import { ui } from '@/theme';
-import { JerseyPair, JerseyPicker, type Jersey } from '@/JerseySwatch';
+import { JerseyPair, JerseyPicker, jerseyList, type Jersey } from '@/JerseySwatch';
 import { fetchPitches, type Pitch } from '@/pitches';
 
 interface Tournament {
@@ -32,8 +32,8 @@ interface Tournament {
     state: string | null;
     scoreUs: number | null;
     scoreThem: number | null;
-    jerseyColor?: Jersey;
-    opponentJerseyColor?: Jersey;
+    jerseyColor?: Jersey | null;
+    jerseyColors?: Jersey[];
   }>;
   nominations: Array<{ memberId: string; firstName: string; lastName: string }>;
 }
@@ -75,8 +75,7 @@ export default function TournamentScreen() {
   const [mDate, setMDate] = useState('');
   const [mTime, setMTime] = useState('');
   const [mPlace, setMPlace] = useState('');
-  const [mJersey, setMJersey] = useState<Jersey>(null);
-  const [mOppJersey, setMOppJersey] = useState<Jersey>(null);
+  const [mJersey, setMJersey] = useState<Jersey[]>([]);
   const [mPitchId, setMPitchId] = useState('');
   const [pitches, setPitches] = useState<Pitch[]>([]);
   const [busy, setBusy] = useState(false);
@@ -162,8 +161,7 @@ export default function TournamentScreen() {
     setMTime(t.event.startAt.slice(11, 16)); // čas udalosti = wall-clock v UTC komponentoch
     setMPlace(t.event.location ?? '');
     setMPitchId(t.event.pitchId ?? '');
-    setMJersey(null);
-    setMOppJersey(null);
+    setMJersey([]);
     if (pitches.length === 0) fetchPitches().then(setPitches).catch(() => {});
     setAddOpen(true);
   }
@@ -194,8 +192,7 @@ export default function TournamentScreen() {
         body: JSON.stringify({ opponent: mOpp, order: mOrder ? order : undefined,
           startAt,
           ...(mPitchId ? { pitchId: mPitchId } : { location: mPlace || undefined }),
-          jerseyColor: mJersey || undefined,
-          opponentJerseyColor: mOppJersey || undefined,
+          jerseyColors: mJersey,
         }),
       });
       // dátum a miesto ostávajú predvyplnené, zvýši sa poradie
@@ -296,7 +293,7 @@ export default function TournamentScreen() {
               {finished ? `${m.scoreUs ?? 0} : ${m.scoreThem ?? 0} · ` : ''}
               {STATE_SK[m.state ?? ''] ?? ''}
             </Text>
-            <JerseyPair own={m.jerseyColor} opponent={m.opponentJerseyColor} />
+            <JerseyPair colors={jerseyList(m)} />
             {canNominate && (m.state === null || m.state === 'PLANNED') && (
               <Pressable onPress={() => removeMatch(m.eventId)}>
                 <Text style={styles.danger}>Zmazať</Text>
@@ -342,8 +339,7 @@ export default function TournamentScreen() {
               )}
               <Text style={styles.label}>Miesto (voliteľné)</Text>
               <TextInput {...inputProps} style={styles.input} value={mPlace} onChangeText={setMPlace} />
-              <JerseyPicker label="Náš dres" value={mJersey} onChange={setMJersey} />
-              <JerseyPicker label="Dres súpera" value={mOppJersey} onChange={setMOppJersey} />
+              <JerseyPicker label="Dres nášho mužstva" value={mJersey} onChange={setMJersey} />
               <Pressable style={[styles.btn, busy && { opacity: 0.6 }]} onPress={saveMatch} disabled={busy}>
                 <Text style={styles.btnText}>{busy ? 'Ukladám…' : 'Uložiť zápas'}</Text>
               </Pressable>

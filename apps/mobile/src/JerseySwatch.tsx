@@ -20,41 +20,54 @@ export function JerseySwatch({ color, size = 14 }: { color: 'DARK' | 'LIGHT'; si
   );
 }
 
-export type Jersey = 'DARK' | 'LIGHT' | null;
+export type Jersey = 'DARK' | 'LIGHT';
 
-/** Dva štvorčeky s popiskom: náš dres a dres súpera (zobrazí iba zadané). */
-export function JerseyPair({ own, opponent, size = 13 }: { own?: Jersey; opponent?: Jersey; size?: number }) {
-  if (!own && !opponent) return null;
+/** Zo staršieho jerseyColor odvodí pole (ak API jerseyColors neposlalo). */
+export function jerseyList(m?: { jerseyColors?: Jersey[] | null; jerseyColor?: Jersey | null } | null): Jersey[] {
+  if (!m) return [];
+  if (Array.isArray(m.jerseyColors)) return m.jerseyColors;
+  return m.jerseyColor ? [m.jerseyColor] : [];
+}
+
+/** Zobrazenie dresov nášho mužstva: jeden alebo oba (prineste oba). */
+export function JerseyPair({ colors, size = 13 }: { colors?: Jersey[] | null; size?: number }) {
+  const list = colors ?? [];
+  if (list.length === 0) return null;
+  const both = list.length >= 2;
   return (
-    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-      {own ? (
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5 }}>
-          <Text style={{ color: ui.muted, fontSize: 12 }}>Náš dres</Text>
-          <JerseySwatch color={own} size={size} />
-        </View>
-      ) : null}
-      {opponent ? (
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5 }}>
-          <Text style={{ color: ui.muted, fontSize: 12 }}>Dres súpera</Text>
-          <JerseySwatch color={opponent} size={size} />
-        </View>
-      ) : null}
+    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+      <Text style={{ color: ui.muted, fontSize: 12 }}>Dresy:</Text>
+      {(['LIGHT', 'DARK'] as const)
+        .filter((c) => list.includes(c))
+        .map((c) => (
+          <View key={c} style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+            <JerseySwatch color={c} size={size} />
+            <Text style={{ color: ui.muted, fontSize: 12 }}>{c === 'LIGHT' ? 'biely' : 'modrý'}</Text>
+          </View>
+        ))}
+      {both ? <Text style={{ color: ui.muted, fontSize: 12 }}>– prineste oba</Text> : null}
     </View>
   );
 }
 
-/** Výber Tmavý / Svetlý / nezadané (opätovné ťuknutie zruší výber). */
-export function JerseyPicker({ label, value, onChange }: { label: string; value: Jersey; onChange: (v: Jersey) => void }) {
+/** Viacvýber dresu: Biely / Modrý, nezávisle zapnúť/vypnúť. */
+export function JerseyPicker({ label, value, onChange }: { label: string; value: Jersey[]; onChange: (v: Jersey[]) => void }) {
+  const hint =
+    value.length === 0
+      ? 'Dres zatiaľ neurčený'
+      : value.length === 1
+        ? `Hráči prinesú: ${value[0] === 'LIGHT' ? 'biely' : 'modrý'} dres`
+        : 'Hráči prinesú oba dresy (biely aj modrý)';
   return (
     <View>
       <Text style={{ fontSize: 13, fontWeight: '600', color: ui.muted, marginTop: 12, marginBottom: 4 }}>{label}</Text>
       <View style={{ flexDirection: 'row', gap: 8 }}>
-        {(['DARK', 'LIGHT'] as const).map((c) => {
-          const on = value === c;
+        {(['LIGHT', 'DARK'] as const).map((c) => {
+          const on = value.includes(c);
           return (
             <Pressable
               key={c}
-              onPress={() => onChange(on ? null : c)}
+              onPress={() => onChange(on ? value.filter((x) => x !== c) : [...value, c])}
               style={{
                 flexDirection: 'row',
                 alignItems: 'center',
@@ -68,11 +81,13 @@ export function JerseyPicker({ label, value, onChange }: { label: string; value:
               }}
             >
               <JerseySwatch color={c} />
-              <Text style={{ color: on ? ui.onAccent : ui.ink, fontWeight: '600', fontSize: 13 }}>{c === 'DARK' ? 'Tmavý' : 'Svetlý'}</Text>
+              <Text style={{ color: on ? ui.onAccent : ui.ink, fontWeight: '600', fontSize: 13 }}>{c === 'LIGHT' ? 'Biely' : 'Modrý'}</Text>
             </Pressable>
           );
         })}
       </View>
+      <Text style={{ color: ui.muted, fontSize: 12, marginTop: 6 }}>{hint}</Text>
+      <Text style={{ color: ui.muted, fontSize: 12 }}>Ak ešte neviete, vyberte oba.</Text>
     </View>
   );
 }

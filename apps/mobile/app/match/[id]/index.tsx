@@ -15,7 +15,7 @@ import { API_URL, api, getToken } from '@/api';
 import { canManageTeam, fetchMe, type Me } from '@/auth';
 import { enqueue, flush } from '@/offline';
 import { ui } from '@/theme';
-import { JerseyPair, JerseyPicker } from '@/JerseySwatch';
+import { JerseyPair, JerseyPicker, jerseyList } from '@/JerseySwatch';
 import { KeyboardScreen } from '@/KeyboardScreen';
 import { MatchTimerCard, timerOf, type MatchTimerFields } from '@/MatchTimerCard';
 
@@ -42,8 +42,8 @@ interface MatchDetail extends MatchTimerFields {
   state: string;
   meetAt: string | null;
   notes: string | null;
-  jerseyColor: 'DARK' | 'LIGHT' | null;
-  opponentJerseyColor?: 'DARK' | 'LIGHT' | null;
+  jerseyColor?: 'DARK' | 'LIGHT' | null;
+  jerseyColors?: ('DARK' | 'LIGHT')[];
   videoUrl: string | null;
   highlightsUrl: string | null;
   event: {
@@ -207,9 +207,9 @@ export default function MatchLiveScreen() {
     }
   }
 
-  async function setJersey(field: 'jerseyColor' | 'opponentJerseyColor', color: 'DARK' | 'LIGHT' | null) {
+  async function setJersey(colors: ('DARK' | 'LIGHT')[]) {
     try {
-      await api(`/matches/${id}/details`, { method: 'POST', body: JSON.stringify({ [field]: color }) });
+      await api(`/matches/${id}/details`, { method: 'POST', body: JSON.stringify({ jerseyColors: colors }) });
       await load();
     } catch (e) {
       Alert.alert('Chyba', e instanceof Error ? e.message : 'Uloženie zlyhalo');
@@ -468,8 +468,7 @@ export default function MatchLiveScreen() {
             placeholderTextColor={ui.placeholder}
             multiline
           />
-          <JerseyPicker label="Náš dres" value={match.jerseyColor ?? null} onChange={(v) => setJersey('jerseyColor', v)} />
-          <JerseyPicker label="Dres súpera" value={match.opponentJerseyColor ?? null} onChange={(v) => setJersey('opponentJerseyColor', v)} />
+          <JerseyPicker label="Dres nášho mužstva" value={jerseyList(match)} onChange={setJersey} />
           <Pressable
             style={[styles.saveScoreBtn, detailsBusy && { opacity: 0.5 }, { alignSelf: 'flex-end', marginTop: 8 }]}
             onPress={saveDetails}
@@ -484,7 +483,7 @@ export default function MatchLiveScreen() {
             <Text style={styles.meetLabel}>Zraz: </Text>
             {formatEventTimeSk(match.meetAt ?? new Date(new Date(match.event.startAt).getTime() - 3_600_000))}
           </Text>
-          <JerseyPair own={match.jerseyColor} opponent={match.opponentJerseyColor} size={14} />
+          <JerseyPair colors={jerseyList(match)} size={14} />
           <Text style={styles.meetLine}>
             <Text style={styles.meetLabel}>Polčas: </Text>
             {match.halfLengthMin ?? DEFAULT_HALF_LENGTH_MIN} min
