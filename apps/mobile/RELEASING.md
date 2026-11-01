@@ -28,7 +28,7 @@ Nainštaluj výsledný APK do telefónu (z odkazu/QR, ktorý EAS vypíše).
 ## Ďalšie JS zmeny — bez rebuildu
 ```bash
 cd apps/mobile
-pnpm update:preview -- "popis zmeny"     # OTA do kanála preview
+pnpm update:preview "popis zmeny"     # OTA do kanála preview
 ```
 Appka si update stiahne pri ďalšom otvorení (aplikuje sa po reštarte appky).
 
@@ -36,7 +36,7 @@ Appka si update stiahne pri ďalšom otvorení (aplikuje sa po reštarte appky).
 ```bash
 eas build --profile production --platform all       # alebo: pnpm build:production
 # JS opravy medzi buildmi:
-pnpm update:production -- "popis"
+pnpm update:production "popis"
 ```
 
 ## Trvalý odkaz na Android APK (web fkknv.sk)
