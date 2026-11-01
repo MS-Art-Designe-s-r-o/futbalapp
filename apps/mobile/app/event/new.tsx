@@ -7,7 +7,7 @@ import { coachTeams, fetchMe, isStaff, type Me } from '@/auth';
 import { ui } from '@/theme';
 import { KeyboardScreen } from '@/KeyboardScreen';
 import { fetchPitches, isHhmm, normHhmm, SURFACE_LABELS, toMin, type Pitch } from '@/pitches';
-import { JerseySwatch } from '@/JerseySwatch';
+import { JerseyPicker } from '@/JerseySwatch';
 
 interface Team {
   id: string;
@@ -41,7 +41,8 @@ export default function NewEventScreen() {
   const [opponent, setOpponent] = useState('');
   const [isHome, setIsHome] = useState(true);
   const [friendly, setFriendly] = useState(false);
-  const [jerseyColor, setJerseyColor] = useState<'' | 'DARK' | 'LIGHT'>('');
+  const [jerseyColor, setJerseyColor] = useState<'DARK' | 'LIGHT' | null>(null);
+  const [oppJersey, setOppJersey] = useState<'DARK' | 'LIGHT' | null>(null);
   const [busy, setBusy] = useState(false);
   const [pitches, setPitches] = useState<Pitch[]>([]);
   const [pitchId, setPitchId] = useState('');
@@ -171,6 +172,7 @@ export default function NewEventScreen() {
             isHome,
             friendly: friendly || undefined,
             jerseyColor: jerseyColor || undefined,
+            opponentJerseyColor: oppJersey || undefined,
           }),
         });
       }
@@ -335,27 +337,8 @@ export default function NewEventScreen() {
           </View>
           <Text style={styles.label}>Súper</Text>
           <TextInput {...inputProps} style={styles.input} value={opponent} onChangeText={setOpponent} />
-          <Text style={styles.label}>Dres</Text>
-          <View style={styles.row}>
-            <Pressable
-              style={chip(jerseyColor === 'DARK')}
-              onPress={() => setJerseyColor(jerseyColor === 'DARK' ? '' : 'DARK')}
-            >
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                <JerseySwatch color="DARK" />
-                <Text style={chipTxt(jerseyColor === 'DARK')}>Tmavý</Text>
-              </View>
-            </Pressable>
-            <Pressable
-              style={chip(jerseyColor === 'LIGHT')}
-              onPress={() => setJerseyColor(jerseyColor === 'LIGHT' ? '' : 'LIGHT')}
-            >
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                <JerseySwatch color="LIGHT" />
-                <Text style={chipTxt(jerseyColor === 'LIGHT')}>Svetlý</Text>
-              </View>
-            </Pressable>
-          </View>
+          <JerseyPicker label="Náš dres" value={jerseyColor} onChange={setJerseyColor} />
+          <JerseyPicker label="Dres súpera" value={oppJersey} onChange={setOppJersey} />
           <Text style={styles.label}>Dátum (RRRR-MM-DD)</Text>
           <TextInput {...inputProps} style={styles.input} value={date} onChangeText={setDate} placeholder="2026-09-12" />
           <View style={styles.row}>

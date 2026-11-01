@@ -5,6 +5,8 @@ import { formatEventDateTimeSk } from '@fkknv/shared';
 import { api } from '@/api';
 import { canManageTeam, fetchMe, type Me } from '@/auth';
 import { ui } from '@/theme';
+import { JerseyPair, JerseyPicker, type Jersey } from '@/JerseySwatch';
+import { fetchPitches, type Pitch } from '@/pitches';
 
 interface Tournament {
   event: {
@@ -14,6 +16,7 @@ interface Tournament {
     endAt: string | null;
     location: string | null;
     address?: string | null;
+    pitchId?: string | null;
     teamId: string | null;
     team: { id: string; name: string } | null;
     legacyMatchId?: string | null;
@@ -29,6 +32,8 @@ interface Tournament {
     state: string | null;
     scoreUs: number | null;
     scoreThem: number | null;
+    jerseyColor?: Jersey;
+    opponentJerseyColor?: Jersey;
   }>;
   nominations: Array<{ memberId: string; firstName: string; lastName: string }>;
 }
@@ -70,6 +75,10 @@ export default function TournamentScreen() {
   const [mDate, setMDate] = useState('');
   const [mTime, setMTime] = useState('');
   const [mPlace, setMPlace] = useState('');
+  const [mJersey, setMJersey] = useState<Jersey>(null);
+  const [mOppJersey, setMOppJersey] = useState<Jersey>(null);
+  const [mPitchId, setMPitchId] = useState('');
+  const [pitches, setPitches] = useState<Pitch[]>([]);
   const [busy, setBusy] = useState(false);
 
   const load = useCallback(async () => {
@@ -150,8 +159,12 @@ export default function TournamentScreen() {
     setMOrder(String(max + 1));
     setMOpp('');
     setMDate(t.event.startAt.slice(0, 10));
-    setMTime('');
-    setMPlace('');
+    setMTime(t.event.startAt.slice(11, 16)); // čas udalosti = wall-clock v UTC komponentoch
+    setMPlace(t.event.location ?? '');
+    setMPitchId(t.event.pitchId ?? '');
+    setMJersey(null);
+    setMOppJersey(null);
+    if (pitches.length === 0) fetchPitches().then(setPitches).catch(() => {});
     setAddOpen(true);
   }
 
@@ -178,9 +191,16 @@ export default function TournamentScreen() {
     try {
       await api(`/tournaments/${id}/matches`, {
         method: 'POST',
-        body: JSON.stringify({ opponent: mOpp, order: mOrder ? order : undefined, startAt, location: mPlace || undefined }),
+        body: JSON.stringify({ opponent: mOpp, order: mOrder ? order : undefined,
+          startAt,
+          ...(mPitchId ? { pitchId: mPitchId } : { location: mPlace || undefined }),
+          jerseyColor: mJersey || undefined,
+          opponentJerseyColor: mOppJersey || undefined,
+        }),
       });
-      setAddOpen(false);
+      // dátum a miesto ostávajú predvyplnené, zvýši sa poradie
+      setMOrder(String((order || 0) + 1));
+      setMOpp('');
       await load();
     } catch (e) {
       Alert.alert('Chyba', e instanceof Error ? e.message : 'Uloženie zlyhalo');
@@ -276,6 +296,7 @@ export default function TournamentScreen() {
               {finished ? `${m.scoreUs ?? 0} : ${m.scoreThem ?? 0} · ` : ''}
               {STATE_SK[m.state ?? ''] ?? ''}
             </Text>
+            <JerseyPair own={m.jerseyColor} opponent={m.opponentJerseyColor} />
             {canNominate && (m.state === null || m.state === 'PLANNED') && (
               <Pressable onPress={() => removeMatch(m.eventId)}>
                 <Text style={styles.danger}>Zmazať</Text>
@@ -307,8 +328,22 @@ export default function TournamentScreen() {
               <TextInput {...inputProps} style={styles.input} value={mDate} onChangeText={setMDate} />
               <Text style={styles.label}>Čas (HH:MM, voliteľné)</Text>
               <TextInput {...inputProps} style={styles.input} value={mTime} onChangeText={setMTime} placeholder="10:00" />
+              {pitches.length > 0 && (
+                <>
+                  <Text style={styles.label}>Ihrisko</Text>
+                  <View style={styles.wrapRow}>
+                    {pitches.map((p) => (
+                      <Pressable key={p.id} style={[styles.chip, mPitchId === p.id && styles.chipActive]} onPress={() => setMPitchId(mPitchId === p.id ? '' : p.id)}>
+                        <Text style={[styles.chipText, mPitchId === p.id && styles.chipTextActive]}>{p.name}</Text>
+                      </Pressable>
+                    ))}
+                  </View>
+                </>
+              )}
               <Text style={styles.label}>Miesto (voliteľné)</Text>
               <TextInput {...inputProps} style={styles.input} value={mPlace} onChangeText={setMPlace} />
+              <JerseyPicker label="Náš dres" value={mJersey} onChange={setMJersey} />
+              <JerseyPicker label="Dres súpera" value={mOppJersey} onChange={setMOppJersey} />
               <Pressable style={[styles.btn, busy && { opacity: 0.6 }]} onPress={saveMatch} disabled={busy}>
                 <Text style={styles.btnText}>{busy ? 'Ukladám…' : 'Uložiť zápas'}</Text>
               </Pressable>

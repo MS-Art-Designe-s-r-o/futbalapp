@@ -8,7 +8,7 @@ import { flush } from '@/offline';
 import { registerForPushNotifications } from '@/notifications';
 import { canManage, canManageTeam, fetchMe, isParent, type Me } from '@/auth';
 import { ui } from '@/theme';
-import { JerseySwatch } from '@/JerseySwatch';
+import { JerseyPair } from '@/JerseySwatch';
 import { checkForUpdateNow, runningBundleLabel } from '@/updates';
 
 interface EventItem {
@@ -31,6 +31,7 @@ interface EventItem {
     isFriendly?: boolean;
     meetAt: string | null;
     jerseyColor: 'DARK' | 'LIGHT' | null;
+    opponentJerseyColor?: 'DARK' | 'LIGHT' | null;
   } | null;
 }
 
@@ -198,7 +199,7 @@ export default function DashboardScreen() {
         {item.match ? <MatchTeams item={item} /> : <Text style={styles.cardTitle}>{item.title}</Text>}
         {item.match && (
           <View style={styles.meetRow}>
-            {item.match.jerseyColor && <JerseySwatch color={item.match.jerseyColor} size={13} />}
+            <JerseyPair own={item.match.jerseyColor} opponent={item.match.opponentJerseyColor} />
             <Text style={styles.meetLine}>
               Zraz: {formatEventTimeSk(item.match.meetAt ?? new Date(new Date(item.startAt).getTime() - 3_600_000))}
             </Text>

@@ -15,7 +15,7 @@ import {
 import { formatEventDateSk } from '@fkknv/shared';
 import { API_URL, api } from '@/api';
 import { ui } from '@/theme';
-import { JerseySwatch } from '@/JerseySwatch';
+import { JerseyPair } from '@/JerseySwatch';
 
 interface PlayedMatch {
   id: string;
@@ -25,6 +25,7 @@ interface PlayedMatch {
   scoreUs: number | null;
   scoreThem: number | null;
   jerseyColor: 'DARK' | 'LIGHT' | null;
+  opponentJerseyColor?: 'DARK' | 'LIGHT' | null;
   videoUrl: string | null;
   highlightsUrl: string | null;
   event: {
@@ -101,7 +102,7 @@ export default function PlayedMatchesScreen() {
                   {item.isFriendly ? ' · Priateľský' : ''}
                   {item.event.parent ? ` · ${item.event.parent.title}${item.event.tournamentOrder ? ` ${item.event.tournamentOrder}. zápas` : ''}` : ''}
                 </Text>
-                {item.jerseyColor && <JerseySwatch color={item.jerseyColor} size={13} />}
+                <JerseyPair own={item.jerseyColor} opponent={item.opponentJerseyColor} />
               </View>
               <Text style={styles.teams}>
                 {homeName} <Text style={styles.score}>{homeScore} : {awayScore}</Text> {awayName}

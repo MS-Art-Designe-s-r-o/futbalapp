@@ -15,7 +15,7 @@ import { API_URL, api, getToken } from '@/api';
 import { canManageTeam, fetchMe, type Me } from '@/auth';
 import { enqueue, flush } from '@/offline';
 import { ui } from '@/theme';
-import { JerseySwatch } from '@/JerseySwatch';
+import { JerseyPair, JerseyPicker } from '@/JerseySwatch';
 import { KeyboardScreen } from '@/KeyboardScreen';
 import { MatchTimerCard, timerOf, type MatchTimerFields } from '@/MatchTimerCard';
 
@@ -43,6 +43,7 @@ interface MatchDetail extends MatchTimerFields {
   meetAt: string | null;
   notes: string | null;
   jerseyColor: 'DARK' | 'LIGHT' | null;
+  opponentJerseyColor?: 'DARK' | 'LIGHT' | null;
   videoUrl: string | null;
   highlightsUrl: string | null;
   event: {
@@ -206,9 +207,9 @@ export default function MatchLiveScreen() {
     }
   }
 
-  async function setJersey(color: 'DARK' | 'LIGHT' | null) {
+  async function setJersey(field: 'jerseyColor' | 'opponentJerseyColor', color: 'DARK' | 'LIGHT' | null) {
     try {
-      await api(`/matches/${id}/details`, { method: 'POST', body: JSON.stringify({ jerseyColor: color }) });
+      await api(`/matches/${id}/details`, { method: 'POST', body: JSON.stringify({ [field]: color }) });
       await load();
     } catch (e) {
       Alert.alert('Chyba', e instanceof Error ? e.message : 'Uloženie zlyhalo');
@@ -467,23 +468,8 @@ export default function MatchLiveScreen() {
             placeholderTextColor={ui.placeholder}
             multiline
           />
-          <Text style={[styles.meetLabel, { marginTop: 8 }]}>Dres</Text>
-          <View style={styles.jerseyRow}>
-            <Pressable
-              style={[styles.jerseyChip, match.jerseyColor === 'DARK' && styles.jerseyChipActive]}
-              onPress={() => setJersey(match.jerseyColor === 'DARK' ? null : 'DARK')}
-            >
-              <JerseySwatch color="DARK" />
-              <Text style={styles.jerseyChipText}>Tmavý</Text>
-            </Pressable>
-            <Pressable
-              style={[styles.jerseyChip, match.jerseyColor === 'LIGHT' && styles.jerseyChipActive]}
-              onPress={() => setJersey(match.jerseyColor === 'LIGHT' ? null : 'LIGHT')}
-            >
-              <JerseySwatch color="LIGHT" />
-              <Text style={styles.jerseyChipText}>Svetlý</Text>
-            </Pressable>
-          </View>
+          <JerseyPicker label="Náš dres" value={match.jerseyColor ?? null} onChange={(v) => setJersey('jerseyColor', v)} />
+          <JerseyPicker label="Dres súpera" value={match.opponentJerseyColor ?? null} onChange={(v) => setJersey('opponentJerseyColor', v)} />
           <Pressable
             style={[styles.saveScoreBtn, detailsBusy && { opacity: 0.5 }, { alignSelf: 'flex-end', marginTop: 8 }]}
             onPress={saveDetails}
@@ -498,13 +484,7 @@ export default function MatchLiveScreen() {
             <Text style={styles.meetLabel}>Zraz: </Text>
             {formatEventTimeSk(match.meetAt ?? new Date(new Date(match.event.startAt).getTime() - 3_600_000))}
           </Text>
-          {match.jerseyColor ? (
-            <View style={styles.jerseyLine}>
-              <Text style={styles.meetLabel}>Dres: </Text>
-              <JerseySwatch color={match.jerseyColor} />
-              <Text style={styles.meetNotes}>{match.jerseyColor === 'DARK' ? 'tmavý' : 'svetlý'}</Text>
-            </View>
-          ) : null}
+          <JerseyPair own={match.jerseyColor} opponent={match.opponentJerseyColor} size={14} />
           <Text style={styles.meetLine}>
             <Text style={styles.meetLabel}>Polčas: </Text>
             {match.halfLengthMin ?? DEFAULT_HALF_LENGTH_MIN} min
