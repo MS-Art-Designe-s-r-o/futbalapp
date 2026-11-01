@@ -135,6 +135,12 @@ export const tournamentClubListSchema = z
     });
   });
 
+/** Dresy nášho mužstva: 0–2 unikátne hodnoty (prázdne = nezadané, obe = hráči prinesú oba). */
+export const jerseyColorsSchema = z
+  .array(z.enum(['DARK', 'LIGHT']))
+  .max(2)
+  .refine((a) => new Set(a).size === a.length, 'Dresy sa nesmú opakovať');
+
 export const createEventSchema = z.object({
   type: z.enum(EVENT_TYPES),
   title: z.string().min(2).max(120),
@@ -157,10 +163,9 @@ export const createEventSchema = z.object({
   friendly: z.boolean().optional(),
   /// TOURNAMENT: zúčastnené mužstvá (názvy klubov z registra; nové sa do registra doplnia)
   participants: tournamentClubListSchema.optional(),
-  /// farba dresu pri zápase: tmavý / svetlý
+  /// dresy nášho mužstva (0–2 unikátne); staré `jerseyColor` ostáva pre spätnú kompatibilitu
+  jerseyColors: jerseyColorsSchema.optional(),
   jerseyColor: z.enum(['DARK', 'LIGHT']).optional(),
-  /// farba dresu súpera (nepovinné)
-  opponentJerseyColor: z.enum(['DARK', 'LIGHT']).optional(),
   /// zobraziť v kalendári na verejnom webe (platí len pre TRAINING)
   isPublic: z.boolean().optional(),
   /// tréning: potvrdené, že plochu zdieľa s iným tréningom v rovnakom čase (zápas sa nikdy nezdieľa)
@@ -189,9 +194,9 @@ export const createTournamentMatchSchema = z.object({
   address: eventAddressSchema,
   /// hracia plocha; predvolene plocha turnaja
   pitchId: z.string().optional(),
-  /// farba dresu, v ktorom nastúpime / dresu súpera; null = nezadané (pri PATCH vymaže)
+  /// dresy nášho mužstva (0–2 unikátne; prázdne = nezadané); staré `jerseyColor` (null = nezadané)
+  jerseyColors: jerseyColorsSchema.optional(),
   jerseyColor: z.enum(['DARK', 'LIGHT']).nullable().optional(),
-  opponentJerseyColor: z.enum(['DARK', 'LIGHT']).nullable().optional(),
 });
 export type CreateTournamentMatchInput = z.infer<typeof createTournamentMatchSchema>;
 

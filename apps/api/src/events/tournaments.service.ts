@@ -1,5 +1,5 @@
 import { BadRequestException, ConflictException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
-import { formatEventDateTimeSk, type CreateTournamentMatchInput, type UpdateTournamentMatchInput } from '@fkknv/shared';
+import { formatEventDateTimeSk, resolveJerseys, type CreateTournamentMatchInput, type UpdateTournamentMatchInput } from '@fkknv/shared';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { ClubsService } from '../clubs/clubs.service';
@@ -25,7 +25,7 @@ const TOURNAMENT_INCLUDE = Prisma.validator<Prisma.EventInclude>()({
           opponent: true,
           opponentLogo: true,
           jerseyColor: true,
-          opponentJerseyColor: true,
+          jerseyColors: true,
           state: true,
           scoreUs: true,
           scoreThem: true,
@@ -77,7 +77,7 @@ export class TournamentsService {
         location: c.location,
         pitchId: c.pitchId,
         jerseyColor: c.match!.jerseyColor,
-        opponentJerseyColor: c.match!.opponentJerseyColor,
+        jerseyColors: c.match!.jerseyColors,
         state: c.match!.state,
         scoreUs: c.match!.scoreUs,
         scoreThem: c.match!.scoreThem,
@@ -286,8 +286,7 @@ export class TournamentsService {
             opponentLogo,
             isHome: false,
             isFriendly: false,
-            jerseyColor: input.jerseyColor ?? null,
-            opponentJerseyColor: input.opponentJerseyColor ?? null,
+            ...(resolveJerseys(input) ?? { jerseyColors: [], jerseyColor: null }),
           },
         },
       },
@@ -330,14 +329,9 @@ export class TournamentsService {
         pitchId: pitch ? pitch.id : undefined,
       },
     });
-    if (input.jerseyColor !== undefined || input.opponentJerseyColor !== undefined) {
-      await this.prisma.match.update({
-        where: { id: child.match.id },
-        data: {
-          ...(input.jerseyColor !== undefined ? { jerseyColor: input.jerseyColor } : {}),
-          ...(input.opponentJerseyColor !== undefined ? { opponentJerseyColor: input.opponentJerseyColor } : {}),
-        },
-      });
+    const jerseys = resolveJerseys(input);
+    if (jerseys) {
+      await this.prisma.match.update({ where: { id: child.match.id }, data: jerseys });
     }
     return { eventId, matchId: child.match.id, order };
   }

@@ -117,7 +117,7 @@ export class MatchesController {
       meetAt?: string | null;
       notes?: string | null;
       jerseyColor?: 'DARK' | 'LIGHT' | null;
-      opponentJerseyColor?: 'DARK' | 'LIGHT' | null;
+      jerseyColors?: ('DARK' | 'LIGHT')[];
       halfLengthMin?: number | null;
     },
     @CurrentUser() user: AuthUser,

@@ -747,8 +747,8 @@ model Match {
   notes       String?
   /// Farba dresu, v ktorom nastúpime (tmavý/svetlý) — voliteľné, zobrazuje sa v kalendári.
   jerseyColor JerseyColor?
-  /// dres súpera (nepovinné)
-  opponentJerseyColor JerseyColor?
+  /// Dresy nášho mužstva: jeden, alebo oba (hráči prinesú oba); prázdne = nezadané. jerseyColor je odvodené (spätná kompatibilita).
+  jerseyColors JerseyColor[] @default([])
   /// Odkaz na video zo zápasu (napr. Veo) — dopĺňa sa pri/po zápase.
   videoUrl    String?
   /// Odkaz na highlighty zo zápasu (strih najlepších momentov).

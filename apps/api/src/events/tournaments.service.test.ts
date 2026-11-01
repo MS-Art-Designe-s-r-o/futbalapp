@@ -189,13 +189,17 @@ describe('vytvorenie turnaja a priateľského zápasu (POST /events)', () => {
   it('dresy sa uložia pri bežnom aj priateľskom zápase; bez zadania null', async () => {
     const { service, prisma } = makeEvents();
     for (const friendly of [false, true]) {
-      await service.create({ type: 'MATCH', title: 'Z', teamId: 't1', startAt: new Date(), opponent: 'X', friendly, jerseyColor: 'DARK', opponentJerseyColor: 'LIGHT' } as never, 'u1');
+      await service.create({ type: 'MATCH', title: 'Z', teamId: 't1', startAt: new Date(), opponent: 'X', friendly, jerseyColors: ['DARK'] } as never, 'u1');
     }
     await service.create({ type: 'MATCH', title: 'Z', teamId: 't1', startAt: new Date(), opponent: 'X' } as never, 'u1');
+    await service.create({ type: 'MATCH', title: 'Z', teamId: 't1', startAt: new Date(), opponent: 'X', jerseyColors: ['LIGHT', 'DARK'] } as never, 'u1');
+    await service.create({ type: 'MATCH', title: 'Z', teamId: 't1', startAt: new Date(), opponent: 'X', jerseyColor: 'LIGHT' } as never, 'u1');
     const calls = prisma.event.create.mock.calls.map((c) => c[0].data.match.create);
-    expect(calls[0]).toMatchObject({ isFriendly: false, jerseyColor: 'DARK', opponentJerseyColor: 'LIGHT' });
-    expect(calls[1]).toMatchObject({ isFriendly: true, jerseyColor: 'DARK', opponentJerseyColor: 'LIGHT' });
-    expect(calls[2]).toMatchObject({ jerseyColor: null, opponentJerseyColor: null });
+    expect(calls[0]).toMatchObject({ isFriendly: false, jerseyColors: ['DARK'], jerseyColor: 'DARK' });
+    expect(calls[1]).toMatchObject({ isFriendly: true, jerseyColors: ['DARK'], jerseyColor: 'DARK' });
+    expect(calls[2]).toMatchObject({ jerseyColors: [], jerseyColor: null });
+    expect(calls[3]).toMatchObject({ jerseyColors: ['LIGHT', 'DARK'], jerseyColor: null }); // oba -> staré null
+    expect(calls[4]).toMatchObject({ jerseyColors: ['LIGHT'], jerseyColor: 'LIGHT' }); // staré telo
   });
 
   it('bežný zápas nie je priateľský', async () => {
@@ -233,32 +237,37 @@ describe('zápasy turnaja', () => {
       opponentLogo: 'https://x/l.png',
       isHome: false,
       isFriendly: false,
+      jerseyColors: [],
       jerseyColor: null,
-      opponentJerseyColor: null,
     });
   });
 
   it('zápas turnaja: vlastný pitchId prepíše plochu; dresy sa uložia; kontrola obsadenosti sa nevolá', async () => {
     const { service, prisma } = makeTournaments(tournament());
-    await service.addMatch('tr1', { opponent: 'Slavia', pitchId: 'p2', jerseyColor: 'DARK', opponentJerseyColor: 'LIGHT' }, admin);
+    await service.addMatch('tr1', { opponent: 'Slavia', pitchId: 'p2', jerseyColors: ['DARK', 'LIGHT'] }, admin);
     const data = prisma.event.create.mock.calls[0]![0].data as Record<string, any>;
     expect(data).toMatchObject({ pitchId: 'p2', location: 'Umelka', surface: 'UT2', address: 'Iná 5' });
-    expect(data.match.create).toMatchObject({ jerseyColor: 'DARK', opponentJerseyColor: 'LIGHT' });
+    expect(data.match.create).toMatchObject({ jerseyColors: ['DARK', 'LIGHT'], jerseyColor: null });
     expect(prisma.event.findMany).toBeUndefined(); // assertPitchFree (event.findMany) sa nevolá
   });
 
   it('PATCH zápasu turnaja: dresy sa uložia, null maže, plocha sa zmení', async () => {
     const t = tournament({ children: [child('a', 1, 'Slavia', '2030-05-01T09:00:00Z')] });
     const { service, prisma } = makeTournaments(t);
-    await service.updateMatch('tr1', 'a', { jerseyColor: 'LIGHT', opponentJerseyColor: null, pitchId: 'p2' }, admin);
-    expect(prisma.match.update).toHaveBeenCalledWith({ where: { id: 'm-a' }, data: { jerseyColor: 'LIGHT', opponentJerseyColor: null } });
+    await service.updateMatch('tr1', 'a', { jerseyColors: ['LIGHT'], pitchId: 'p2' }, admin);
+    expect(prisma.match.update).toHaveBeenCalledWith({ where: { id: 'm-a' }, data: { jerseyColors: ['LIGHT'], jerseyColor: 'LIGHT' } });
+    await service.updateMatch('tr1', 'a', { jerseyColor: null }, admin);
+    expect(prisma.match.update).toHaveBeenLastCalledWith({ where: { id: 'm-a' }, data: { jerseyColors: [], jerseyColor: null } });
     expect(prisma.event.update.mock.calls[0]![0].data).toMatchObject({ pitchId: 'p2', location: 'Umelka', surface: 'UT2', address: 'Iná 5' });
   });
 
   it('schémy: dresy a pitchId pri zápase turnaja, null povolený', () => {
-    expect(createTournamentMatchSchema.parse({ opponent: 'X', pitchId: 'p', jerseyColor: 'DARK', opponentJerseyColor: null })).toMatchObject({ pitchId: 'p', opponentJerseyColor: null });
+    expect(createTournamentMatchSchema.parse({ opponent: 'X', pitchId: 'p', jerseyColors: ['DARK'], jerseyColor: null })).toMatchObject({ pitchId: 'p', jerseyColors: ['DARK'] });
+    expect(createTournamentMatchSchema.safeParse({ opponent: 'X', jerseyColors: ['DARK', 'DARK'] }).success).toBe(false);
+    expect(createTournamentMatchSchema.safeParse({ opponent: 'X', jerseyColors: ['DARK', 'LIGHT', 'DARK'] }).success).toBe(false);
+    expect(createTournamentMatchSchema.safeParse({ opponent: 'X', jerseyColors: ['RED'] }).success).toBe(false);
     expect(createTournamentMatchSchema.safeParse({ opponent: 'X', jerseyColor: 'RED' }).success).toBe(false);
-    expect(createEventSchema.parse({ title: 'Zápas', type: 'MATCH', startAt: '2030-05-01T09:00:00Z', opponentJerseyColor: 'LIGHT' }).opponentJerseyColor).toBe('LIGHT');
+    expect(createEventSchema.parse({ title: 'Zápas', type: 'MATCH', startAt: '2030-05-01T09:00:00Z', jerseyColors: ['LIGHT', 'DARK'] }).jerseyColors).toEqual(['LIGHT', 'DARK']);
   });
 
   it('poradie: predvolene max+1, duplicita → 409', async () => {

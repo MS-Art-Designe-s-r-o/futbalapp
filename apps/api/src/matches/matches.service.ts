@@ -1,5 +1,5 @@
 import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
-import { formatEventDateTimeSk, type MatchEventInput, type MatchTimerAction } from '@fkknv/shared';
+import { formatEventDateTimeSk, jerseyColorsSchema, resolveJerseys, type MatchEventInput, type MatchTimerAction } from '@fkknv/shared';
 import type { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { PushService } from '../notifications/push.service';
@@ -98,7 +98,7 @@ export class MatchesService {
         scoreUs: true,
         scoreThem: true,
         jerseyColor: true,
-        opponentJerseyColor: true,
+        jerseyColors: true,
         videoUrl: true,
         highlightsUrl: true,
         event: {
@@ -426,7 +426,7 @@ export class MatchesService {
       meetAt?: string | null;
       notes?: string | null;
       jerseyColor?: 'DARK' | 'LIGHT' | null;
-      opponentJerseyColor?: 'DARK' | 'LIGHT' | null;
+      jerseyColors?: ('DARK' | 'LIGHT')[];
       halfLengthMin?: number | null;
     },
     user: AuthUser,
@@ -436,13 +436,19 @@ export class MatchesService {
       meetAt?: Date | null;
       notes?: string | null;
       jerseyColor?: 'DARK' | 'LIGHT' | null;
-      opponentJerseyColor?: 'DARK' | 'LIGHT' | null;
+      jerseyColors?: ('DARK' | 'LIGHT')[];
       halfLengthMin?: number;
     } = {};
     if (input.meetAt !== undefined) data.meetAt = input.meetAt ? new Date(input.meetAt) : null;
     if (input.notes !== undefined) data.notes = input.notes?.trim() ? input.notes.trim() : null;
-    if (input.jerseyColor !== undefined) data.jerseyColor = input.jerseyColor ?? null;
-    if (input.opponentJerseyColor !== undefined) data.opponentJerseyColor = input.opponentJerseyColor ?? null;
+    if (input.jerseyColors !== undefined) {
+      const parsed = jerseyColorsSchema.safeParse(input.jerseyColors);
+      if (!parsed.success) throw new BadRequestException('Dresy: 0–2 unikátne hodnoty DARK/LIGHT');
+    } else if (input.jerseyColor != null && input.jerseyColor !== 'DARK' && input.jerseyColor !== 'LIGHT') {
+      throw new BadRequestException('Neplatná farba dresu');
+    }
+    const jerseys = resolveJerseys(input);
+    if (jerseys) Object.assign(data, jerseys);
     if (input.halfLengthMin !== undefined) {
       const n = input.halfLengthMin == null ? 45 : Math.trunc(Number(input.halfLengthMin));
       if (!Number.isFinite(n) || n < 1 || n > 60) throw new BadRequestException('Dĺžka polčasu musí byť 1–60 minút');

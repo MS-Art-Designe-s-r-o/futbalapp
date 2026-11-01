@@ -2,6 +2,7 @@ import { BadRequestException, ConflictException, ForbiddenException, Injectable,
 import { randomUUID } from 'node:crypto';
 import {
   generateOccurrences,
+  resolveJerseys,
   formatEventDateTimeSk,
   formatEventTimeSk,
   type CreateEventInput,
@@ -358,8 +359,7 @@ export class EventsService {
                 isHome: input.isHome ?? true,
                 // priateľský zápas: vždy interný (source INTERNAL, bez futbalnetId) — sync ho nemení
                 isFriendly: input.type === 'MATCH' && !!input.friendly,
-                jerseyColor: input.jerseyColor ?? null,
-                opponentJerseyColor: input.opponentJerseyColor ?? null,
+                ...(resolveJerseys(input) ?? { jerseyColors: [], jerseyColor: null }),
                 opponentLogo,
               },
             }
