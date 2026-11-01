@@ -17,6 +17,8 @@ export interface PlanEvent {
   pitchId: string | null;
   /** pre zápas/turnaj: true = domáci */
   isHome: boolean | null;
+  /** zápas turnaja — plochu rezervuje turnaj, nepriraďuje sa samostatne */
+  parentEventId?: string | null;
 }
 export interface AssignPlan {
   assignments: Array<{ eventId: string; pitchId: string }>;
@@ -67,7 +69,7 @@ export function planPitchAssignment(input: {
   const end = (e: { startAt: Date; endAt: Date | null }) => (e.endAt ?? new Date(e.startAt.getTime() + DEFAULT_MS)).getTime();
 
   const eligible = input.events
-    .filter((e) => !e.pitchId && e.location?.trim())
+    .filter((e) => !e.pitchId && !e.parentEventId && e.location?.trim())
     // tréningy a domáce zápasy/turnaje; zápasy vonku sa neplánujú na našej ploche
     .filter((e) => e.type === 'TRAINING' || ((e.type === 'MATCH' || e.type === 'TOURNAMENT') && e.isHome === true))
     .filter((e) => input.includePast || e.startAt.getTime() >= now.getTime())

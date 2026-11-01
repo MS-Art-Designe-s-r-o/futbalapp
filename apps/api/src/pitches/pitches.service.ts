@@ -59,10 +59,12 @@ export class PitchesService {
         startAt: true,
         endAt: true,
         team: { select: { name: true } },
+        parent: { select: { pitchId: true } },
       },
       orderBy: { startAt: 'asc' },
     });
-    return rows.map((r) => ({
+    // zápas turnaja na rovnakej ploche ako turnaj sa nepočíta dvakrát (plochu rezervuje turnaj)
+    return rows.filter((r) => !(r.parent && r.parent.pitchId === r.pitchId)).map((r) => ({
       id: r.id,
       pitchId: r.pitchId as string,
       type: r.type,

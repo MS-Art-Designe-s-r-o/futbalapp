@@ -359,6 +359,7 @@ export class EventsService {
                 // priateľský zápas: vždy interný (source INTERNAL, bez futbalnetId) — sync ho nemení
                 isFriendly: input.type === 'MATCH' && !!input.friendly,
                 jerseyColor: input.jerseyColor ?? null,
+                opponentJerseyColor: input.opponentJerseyColor ?? null,
                 opponentLogo,
               },
             }
@@ -464,7 +465,8 @@ export class EventsService {
       throw new BadRequestException('Koniec musí byť po začiatku');
     }
     this.assertEndAfterStart(newStart, newEnd, !!effectivePitchId && (input.endAt !== undefined || input.pitchId !== undefined));
-    if (effectivePitchId) {
+    // zápas turnaja zdieľa plochu s turnajom (rodič ju rezervuje) → kontrola obsadenosti sa preskočí
+    if (effectivePitchId && !event.parentEventId) {
       const clashes = await this.assertPitchFree(effectivePitchId, [{ startAt: newStart, endAt: newEnd }], {
         excludeId: eventId,
         shareable: event.type === 'TRAINING',

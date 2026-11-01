@@ -159,6 +159,8 @@ export const createEventSchema = z.object({
   participants: tournamentClubListSchema.optional(),
   /// farba dresu pri zápase: tmavý / svetlý
   jerseyColor: z.enum(['DARK', 'LIGHT']).optional(),
+  /// farba dresu súpera (nepovinné)
+  opponentJerseyColor: z.enum(['DARK', 'LIGHT']).optional(),
   /// zobraziť v kalendári na verejnom webe (platí len pre TRAINING)
   isPublic: z.boolean().optional(),
   /// tréning: potvrdené, že plochu zdieľa s iným tréningom v rovnakom čase (zápas sa nikdy nezdieľa)
@@ -185,6 +187,11 @@ export const createTournamentMatchSchema = z.object({
   endAt: z.coerce.date().optional(),
   location: z.string().max(200).optional(),
   address: eventAddressSchema,
+  /// hracia plocha; predvolene plocha turnaja
+  pitchId: z.string().optional(),
+  /// farba dresu, v ktorom nastúpime / dresu súpera; null = nezadané (pri PATCH vymaže)
+  jerseyColor: z.enum(['DARK', 'LIGHT']).nullable().optional(),
+  opponentJerseyColor: z.enum(['DARK', 'LIGHT']).nullable().optional(),
 });
 export type CreateTournamentMatchInput = z.infer<typeof createTournamentMatchSchema>;
 

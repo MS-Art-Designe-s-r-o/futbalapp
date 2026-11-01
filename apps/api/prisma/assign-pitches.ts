@@ -64,11 +64,11 @@ async function main() {
 
     const rows = await prisma.event.findMany({
       where: { isDemo: false, type: { in: ['TRAINING', 'MATCH', 'TOURNAMENT'] } },
-      select: { id: true, type: true, title: true, startAt: true, endAt: true, location: true, address: true, pitchId: true, match: { select: { isHome: true } } },
+      select: { id: true, type: true, title: true, startAt: true, endAt: true, location: true, address: true, pitchId: true, parentEventId: true, match: { select: { isHome: true } } },
     });
     const plan = planPitchAssignment({
       pitches,
-      events: rows.map((r) => ({ id: r.id, type: r.type, title: r.title, startAt: r.startAt, endAt: r.endAt, location: r.location, pitchId: r.pitchId, isHome: r.match?.isHome ?? null })),
+      events: rows.map((r) => ({ id: r.id, type: r.type, title: r.title, startAt: r.startAt, endAt: r.endAt, location: r.location, pitchId: r.pitchId, parentEventId: r.parentEventId, isHome: r.match?.isHome ?? null })),
       reserved: rows.filter((r) => r.pitchId).map((r) => ({ title: r.title, pitchId: r.pitchId!, startAt: r.startAt, endAt: r.endAt })),
       mapping,
       includePast: INCLUDE_PAST,

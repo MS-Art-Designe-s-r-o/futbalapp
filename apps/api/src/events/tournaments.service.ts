@@ -24,6 +24,8 @@ const TOURNAMENT_INCLUDE = Prisma.validator<Prisma.EventInclude>()({
           id: true,
           opponent: true,
           opponentLogo: true,
+          jerseyColor: true,
+          opponentJerseyColor: true,
           state: true,
           scoreUs: true,
           scoreThem: true,
@@ -73,6 +75,9 @@ export class TournamentsService {
         startAt: c.startAt,
         endAt: c.endAt,
         location: c.location,
+        pitchId: c.pitchId,
+        jerseyColor: c.match!.jerseyColor,
+        opponentJerseyColor: c.match!.opponentJerseyColor,
         state: c.match!.state,
         scoreUs: c.match!.scoreUs,
         scoreThem: c.match!.scoreThem,
@@ -223,6 +228,13 @@ export class TournamentsService {
     return this.get(id, user);
   }
 
+  /** Plocha z nastavení (iná než plocha turnaja) → miesto/povrch/adresa zápasu. */
+  private async resolvePitch(pitchId: string) {
+    const p = await this.prisma.pitch.findUnique({ where: { id: pitchId } });
+    if (!p) throw new BadRequestException('Zvolená hracia plocha neexistuje');
+    return p;
+  }
+
   private participantFor(t: Awaited<ReturnType<TournamentsService['load']>>, opponent: string) {
     const p = t.tournamentParticipants.find((x) => lower(x.clubName) === lower(opponent));
     if (!p) throw new BadRequestException(`Mužstvo „${opponent.trim()}" nie je medzi účastníkmi turnaja`);
@@ -245,6 +257,7 @@ export class TournamentsService {
     const maxOrder = Math.max(0, ...t.children.map((c) => c.tournamentOrder ?? 0));
     const order = input.order ?? maxOrder + 1;
     this.assertOrderFree(t, order);
+    const pitch = input.pitchId && input.pitchId !== t.pitchId ? await this.resolvePitch(input.pitchId) : null;
     const startAt = input.startAt ?? t.startAt;
     const endAt = input.endAt ?? null;
     TournamentsService.assertRange(startAt, endAt);
@@ -258,16 +271,24 @@ export class TournamentsService {
         title: `${t.title}: ${order}. zápas`,
         startAt,
         endAt,
-        location: input.location ?? t.location,
-        address: input.address !== undefined ? input.address : t.address,
-        // plochu (pitchId) obsadzuje turnaj; zápas turnaja ju nedrží, aby sa nekolidoval s turnajom
-        surface: t.surface,
+        // zápas turnaja dedí plochu turnaja (kontrola obsadenosti sa nerobí — plochu rezervuje turnaj)
+        location: pitch ? pitch.name : (input.location ?? t.location),
+        address: input.address !== undefined ? input.address : pitch ? (pitch.address ?? t.address) : t.address,
+        surface: pitch ? pitch.surface : t.surface,
+        pitchId: pitch ? pitch.id : (t.pitchId ?? undefined),
         source: 'INTERNAL',
         parentEventId: t.id,
         tournamentOrder: order,
         createdById: user.id,
         match: {
-          create: { opponent: participant.clubName, opponentLogo, isHome: false, isFriendly: false },
+          create: {
+            opponent: participant.clubName,
+            opponentLogo,
+            isHome: false,
+            isFriendly: false,
+            jerseyColor: input.jerseyColor ?? null,
+            opponentJerseyColor: input.opponentJerseyColor ?? null,
+          },
         },
       },
       include: { match: { select: { id: true } } },
@@ -285,6 +306,7 @@ export class TournamentsService {
       this.assertOrderFree(t, input.order, eventId);
       order = input.order;
     }
+    const pitch = input.pitchId && input.pitchId !== child.pitchId ? await this.resolvePitch(input.pitchId) : null;
     const startAt = input.startAt ?? child.startAt;
     const endAt = input.endAt !== undefined ? input.endAt : child.endAt;
     TournamentsService.assertRange(startAt, endAt);
@@ -302,10 +324,21 @@ export class TournamentsService {
         title: order !== child.tournamentOrder ? `${t.title}: ${order}. zápas` : undefined,
         startAt: input.startAt,
         endAt: input.endAt,
-        location: input.location,
-        address: input.address,
+        location: pitch ? pitch.name : input.location,
+        address: input.address !== undefined ? input.address : pitch ? (pitch.address ?? undefined) : undefined,
+        surface: pitch ? pitch.surface : undefined,
+        pitchId: pitch ? pitch.id : undefined,
       },
     });
+    if (input.jerseyColor !== undefined || input.opponentJerseyColor !== undefined) {
+      await this.prisma.match.update({
+        where: { id: child.match.id },
+        data: {
+          ...(input.jerseyColor !== undefined ? { jerseyColor: input.jerseyColor } : {}),
+          ...(input.opponentJerseyColor !== undefined ? { opponentJerseyColor: input.opponentJerseyColor } : {}),
+        },
+      });
+    }
     return { eventId, matchId: child.match.id, order };
   }
 
