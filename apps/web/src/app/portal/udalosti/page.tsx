@@ -65,8 +65,7 @@ interface EventItem {
     opponentLogo: string | null;
     meetAt: string | null;
     notes: string | null;
-    jerseyColor: 'DARK' | 'LIGHT' | null;
-    opponentJerseyColor?: 'DARK' | 'LIGHT' | null;
+    jerseyColors?: ('DARK' | 'LIGHT')[];
   } | null;
 }
 
@@ -504,7 +503,7 @@ function EventList({
                 {e.match ? <MatchTeams e={e} /> : <div className="mt-1 font-medium">{e.title}</div>}
                 {e.match && (
                   <div className="mt-1 flex items-center gap-1.5 text-xs text-gray-500">
-                    <JerseyBadges ours={e.match.jerseyColor} theirs={e.match.opponentJerseyColor} />
+                    <JerseyBadges colors={e.match.jerseyColors} />
                     <span>
                       Zraz: {formatEventTimeSk(matchMeetTime(e)!)}
                       {e.match.notes ? ` · ${e.match.notes}` : ''}
@@ -659,23 +658,20 @@ function MonthView({
                             ? `${e.team ? `${compactTeam(e.team.name)} ` : ''}⚽ ${e.match.opponent}`
                             : `${e.team ? `${compactTeam(e.team.name)} ` : ''}${typeLabels[e.type] ?? e.type}`
                         }${e.match?.isFriendly ? ' (prát.)' : ''}${isNominated ? ' ✓' : ''}`;
+                        const jc = e.match?.jerseyColors ?? [];
                         const jersey =
-                          e.match?.jerseyColor || e.match?.opponentJerseyColor ? (
+                          jc.length > 0 ? (
                             <span className="flex shrink-0 items-center gap-0.5">
-                              {e.match.jerseyColor && (
-                                <JerseyIcon
-                                  color={e.match.jerseyColor}
-                                  size={11}
-                                  title={`Náš dres: ${e.match.jerseyColor === 'DARK' ? 'tmavý' : 'svetlý'}`}
-                                />
-                              )}
-                              {e.match.opponentJerseyColor && (
-                                <JerseyIcon
-                                  color={e.match.opponentJerseyColor}
-                                  size={11}
-                                  title={`Dres súpera: ${e.match.opponentJerseyColor === 'DARK' ? 'tmavý' : 'svetlý'}`}
-                                />
-                              )}
+                              {(['LIGHT', 'DARK'] as const)
+                                .filter((c) => jc.includes(c))
+                                .map((c) => (
+                                  <JerseyIcon
+                                    key={c}
+                                    color={c}
+                                    size={11}
+                                    title={`Dres: ${c === 'DARK' ? 'modrý' : 'biely'}`}
+                                  />
+                                ))}
                             </span>
                           ) : null;
                         return href ? (
@@ -1029,8 +1025,7 @@ function MatchModal({
   const [clubs, setClubs] = useState<ClubItem[]>([]);
   const [participants, setParticipants] = useState<string[]>([]);
   const [isHome, setIsHome] = useState(true);
-  const [jerseyColor, setJerseyColor] = useState<JerseyColor | null>(null);
-  const [oppJersey, setOppJersey] = useState<JerseyColor | null>(null);
+  const [jerseyColors, setJerseyColors] = useState<JerseyColor[]>([]);
   const [date, setDate] = useState('');
   const [time, setTime] = useState('10:00');
   const [endTime, setEndTime] = useState('11:30');
@@ -1101,8 +1096,7 @@ function MatchModal({
           ...placeFields(isHome ? pitchId : '', location, surface),
           opponent,
           isHome,
-          jerseyColor: jerseyColor ?? undefined,
-          opponentJerseyColor: oppJersey ?? undefined,
+          jerseyColors,
           address: address.trim() || undefined,
         }),
       });
@@ -1165,8 +1159,7 @@ function MatchModal({
         )}
         {type !== 'TOURNAMENT' && (
           <div className="space-y-3">
-            <JerseyPicker label="Náš dres" value={jerseyColor} onChange={setJerseyColor} />
-            <JerseyPicker label="Dres súpera" value={oppJersey} onChange={setOppJersey} />
+            <JerseyPicker value={jerseyColors} onChange={setJerseyColors} />
           </div>
         )}
         <div className="grid grid-cols-3 gap-3">

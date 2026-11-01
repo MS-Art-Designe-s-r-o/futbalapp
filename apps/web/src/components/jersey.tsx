@@ -22,69 +22,67 @@ export function JerseyIcon({ color, size = 18, title }: { color: JerseyColor; si
   );
 }
 
-/** Výber dresu Tmavý / Svetlý / nezadané (opätovné kliknutie zruší výber). */
+/** Výber dresov nášho mužstva: biely a/alebo modrý (oba = hráči prinesú oba). */
 export function JerseyPicker({
-  label,
   value,
   onChange,
   compact,
 }: {
-  label: string;
-  value: JerseyColor | null | '';
-  onChange: (v: JerseyColor | null) => void;
+  value: JerseyColor[];
+  onChange: (v: JerseyColor[]) => void;
   compact?: boolean;
 }) {
+  const opts = [
+    { val: 'LIGHT', label: 'Biely' },
+    { val: 'DARK', label: 'Modrý' },
+  ] as const;
+  const toggle = (c: JerseyColor) => onChange(value.includes(c) ? value.filter((x) => x !== c) : [...value, c]);
+  const status =
+    value.length === 0
+      ? 'Dres zatiaľ neurčený'
+      : value.length === 2
+        ? 'Hráči prinesú oba dresy (biely aj modrý)'
+        : `Hráči prinesú: ${value[0] === 'LIGHT' ? 'biely' : 'modrý'} dres`;
   return (
     <div>
-      <label className={compact ? 'block text-xs text-gray-500' : labelCls}>{label}</label>
+      <label className={compact ? 'block text-xs text-gray-500' : labelCls}>Dres</label>
       <div className={`flex gap-2 ${compact ? 'mt-1' : ''}`}>
-        {([
-          { val: 'DARK', label: 'Tmavý' },
-          { val: 'LIGHT', label: 'Svetlý' },
-        ] as const).map((o) => (
-          <button
-            key={o.val}
-            type="button"
-            onClick={() => onChange(value === o.val ? null : o.val)}
-            className={`flex items-center gap-2 rounded-md border text-sm ${compact ? 'px-2.5 py-1.5' : 'px-3 py-2'} ${
-              value === o.val ? 'border-club-600 bg-club-50 font-medium text-club-900' : 'border-gray-300 text-gray-600'
-            }`}
-          >
-            <JerseyIcon color={o.val} size={compact ? 16 : 18} />
-            {o.label}
-          </button>
-        ))}
+        {opts.map((o) => {
+          const on = value.includes(o.val);
+          return (
+            <button
+              key={o.val}
+              type="button"
+              aria-pressed={on}
+              onClick={() => toggle(o.val)}
+              className={`flex items-center gap-2 rounded-md border text-sm ${compact ? 'px-2.5 py-1.5' : 'px-3 py-2'} ${
+                on ? 'border-club-600 bg-club-50 font-medium text-club-900' : 'border-gray-300 text-gray-600'
+              }`}
+            >
+              <JerseyIcon color={o.val} size={compact ? 16 : 18} />
+              {o.label}
+            </button>
+          );
+        })}
       </div>
+      <p className="mt-1 text-xs text-gray-600">{status}</p>
+      <p className="text-xs text-gray-400">Ak ešte neviete, vyberte oba.</p>
     </div>
   );
 }
 
-/** Malé štítky „Náš dres" / „Dres súpera". */
-export function JerseyBadges({
-  ours,
-  theirs,
-  size = 14,
-}: {
-  ours?: JerseyColor | null;
-  theirs?: JerseyColor | null;
-  size?: number;
-}) {
-  if (!ours && !theirs) return null;
-  const name = (c: JerseyColor) => (c === 'DARK' ? 'tmavý' : 'svetlý');
+/** Malý štítok „Dresy: biely / modrý / biely aj modrý (prineste oba)". */
+export function JerseyBadges({ colors, size = 14 }: { colors?: JerseyColor[] | null; size?: number }) {
+  if (!colors || colors.length === 0) return null;
+  const both = colors.length >= 2;
+  const text = both ? 'biely aj modrý (prineste oba)' : colors[0] === 'LIGHT' ? 'biely' : 'modrý';
+  const icons: JerseyColor[] = both ? ['LIGHT', 'DARK'] : [colors[0]];
   return (
-    <>
-      {ours && (
-        <span className="inline-flex items-center gap-1 rounded bg-gray-100 px-1.5 py-0.5 text-[11px] text-gray-700">
-          <JerseyIcon color={ours} size={size} />
-          Náš dres: {name(ours)}
-        </span>
-      )}
-      {theirs && (
-        <span className="inline-flex items-center gap-1 rounded bg-gray-100 px-1.5 py-0.5 text-[11px] text-gray-700">
-          <JerseyIcon color={theirs} size={size} />
-          Dres súpera: {name(theirs)}
-        </span>
-      )}
-    </>
+    <span className="inline-flex items-center gap-1 rounded bg-gray-100 px-1.5 py-0.5 text-[11px] text-gray-700">
+      {icons.map((c) => (
+        <JerseyIcon key={c} color={c} size={size} />
+      ))}
+      Dresy: {text}
+    </span>
   );
 }

@@ -26,8 +26,7 @@ interface TournamentMatch {
   scoreThem: number | null;
   address?: string | null;
   pitchId?: string | null;
-  jerseyColor?: JerseyColor | null;
-  opponentJerseyColor?: JerseyColor | null;
+  jerseyColors?: JerseyColor[];
   nominatedCount?: number;
 }
 interface Candidate {
@@ -111,8 +110,7 @@ export default function TournamentPage({ params }: { params: Promise<{ id: strin
   const [pitchId, setPitchId] = useState('');
   const [surface, setSurface] = useState('');
   const [pitches, setPitches] = useState<PitchItem[]>([]);
-  const [jersey, setJersey] = useState<JerseyColor | null>(null);
-  const [oppJersey, setOppJersey] = useState<JerseyColor | null>(null);
+  const [jersey, setJersey] = useState<JerseyColor[]>([]);
   const [matchBusy, setMatchBusy] = useState(false);
   const [matchError, setMatchError] = useState<string | null>(null);
   const [listError, setListError] = useState<string | null>(null);
@@ -189,8 +187,7 @@ export default function TournamentPage({ params }: { params: Promise<{ id: strin
     setLocation(base?.event.location ?? '');
     setSurface('');
     setAddress(base?.event.address ?? '');
-    setJersey(null);
-    setOppJersey(null);
+    setJersey([]);
     setMatchError(null);
   }
   // predvyplnenie formulára po načítaní turnaja (kým sa nezačne upravovať zápas)
@@ -218,8 +215,7 @@ export default function TournamentPage({ params }: { params: Promise<{ id: strin
     setLocation(m.location ?? '');
     setSurface('');
     setAddress(m.address ?? '');
-    setJersey(m.jerseyColor ?? null);
-    setOppJersey(m.opponentJerseyColor ?? null);
+    setJersey(m.jerseyColors ?? []);
     setMatchError(null);
   }
 
@@ -251,8 +247,7 @@ export default function TournamentPage({ params }: { params: Promise<{ id: strin
         if (surface) body.surface = surface;
       }
       if (address.trim()) body.address = address.trim();
-      body.jerseyColor = jersey;
-      body.opponentJerseyColor = oppJersey;
+      body.jerseyColors = jersey;
       if (editing) {
         await api(`/tournaments/${id}/matches/${editing.eventId}`, { method: 'PATCH', body: JSON.stringify(body) });
       } else {
@@ -464,9 +459,9 @@ export default function TournamentPage({ params }: { params: Promise<{ id: strin
                       {hasScore ? ` · ${m.scoreUs}:${m.scoreThem}` : ''}
                       {m.nominatedCount !== undefined ? ` · nominovaných: ${m.nominatedCount}` : ''}
                     </div>
-                    {(m.jerseyColor || m.opponentJerseyColor) && (
+                    {m.jerseyColors && m.jerseyColors.length > 0 && (
                       <div className="mt-1 flex flex-wrap items-center gap-1.5">
-                        <JerseyBadges ours={m.jerseyColor} theirs={m.opponentJerseyColor} />
+                        <JerseyBadges colors={m.jerseyColors} />
                       </div>
                     )}
                   </div>
@@ -542,8 +537,7 @@ export default function TournamentPage({ params }: { params: Promise<{ id: strin
                 onAddress={setAddress}
               />
               <div className="grid gap-3 sm:grid-cols-2">
-                <JerseyPicker label="Náš dres" value={jersey} onChange={setJersey} />
-                <JerseyPicker label="Dres súpera" value={oppJersey} onChange={setOppJersey} />
+                <JerseyPicker value={jersey} onChange={setJersey} />
               </div>
               <ErrorText>{matchError}</ErrorText>
               <div className="flex justify-end gap-2">

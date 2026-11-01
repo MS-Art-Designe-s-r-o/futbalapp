@@ -51,8 +51,7 @@ interface MatchDetail {
   state: string;
   meetAt: string | null;
   notes: string | null;
-  jerseyColor: 'DARK' | 'LIGHT' | null;
-  opponentJerseyColor?: 'DARK' | 'LIGHT' | null;
+  jerseyColors?: ('DARK' | 'LIGHT')[];
   isFriendly?: boolean;
   videoUrl: string | null;
   highlightsUrl: string | null;
@@ -357,10 +356,10 @@ export default function MatchPage({ params }: { params: Promise<{ id: string }> 
     }
   }
 
-  async function setJersey(field: 'jerseyColor' | 'opponentJerseyColor', color: 'DARK' | 'LIGHT' | null) {
+  async function setJersey(colors: ('DARK' | 'LIGHT')[]) {
     setError(null);
     try {
-      await api(`/matches/${id}/details`, { method: 'POST', body: JSON.stringify({ [field]: color }) });
+      await api(`/matches/${id}/details`, { method: 'POST', body: JSON.stringify({ jerseyColors: colors }) });
       await load();
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Uloženie zlyhalo');
@@ -711,8 +710,7 @@ export default function MatchPage({ params }: { params: Promise<{ id: string }> 
                 />
                 <p className="mt-1 text-xs text-gray-400">Pre časomieru, predvolene 45.</p>
               </div>
-              <JerseyPicker label="Náš dres" compact value={match.jerseyColor} onChange={(c) => setJersey('jerseyColor', c)} />
-              <JerseyPicker label="Dres súpera" compact value={match.opponentJerseyColor ?? null} onChange={(c) => setJersey('opponentJerseyColor', c)} />
+              <JerseyPicker compact value={match.jerseyColors ?? []} onChange={setJersey} />
             </div>
             <div>
               <label className="block text-xs text-gray-500">Poznámky k zápasu</label>
@@ -740,9 +738,9 @@ export default function MatchPage({ params }: { params: Promise<{ id: string }> 
               <span className="text-gray-500">Dĺžka polčasu: </span>
               {match.halfLengthMin ?? DEFAULT_HALF_LENGTH_MIN} min
             </p>
-            {match.jerseyColor || match.opponentJerseyColor ? (
+            {match.jerseyColors && match.jerseyColors.length > 0 ? (
               <p className="flex flex-wrap items-center gap-2">
-                <JerseyBadges ours={match.jerseyColor} theirs={match.opponentJerseyColor} size={16} />
+                <JerseyBadges colors={match.jerseyColors} size={16} />
               </p>
             ) : null}
             {match.notes ? (
