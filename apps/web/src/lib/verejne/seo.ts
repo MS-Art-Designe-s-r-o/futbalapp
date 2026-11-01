@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import { SITE_NAME } from './site';
 
+const HERO = { url: '/verejne/hero-bg.jpg', width: 1600, height: 855, alt: 'Ilustračná fotografia chlapcov v dresoch FK Košická Nová Ves (AI vizualizácia)' };
 const LOGO = { url: '/logo.png', width: 250, height: 400, alt: 'Erb FK Košická Nová Ves' };
 
 /**
@@ -8,7 +9,7 @@ const LOGO = { url: '/logo.png', width: 250, height: 400, alt: 'Erb FK Košická
  * openGraph/twitter dostanú plný názov (nededia sa z layoutu, preto ich skladáme tu).
  * `path` je relatívna cesta (resolvuje sa cez metadataBase).
  */
-export function pageMeta(opts: { title: string; description: string; path: string; type?: 'website' | 'article'; publishedTime?: string }): Metadata {
+export function pageMeta(opts: { title: string; description: string; path: string; type?: 'website' | 'article'; publishedTime?: string; hero?: boolean }): Metadata {
   const full = `${opts.title} · ${SITE_NAME}`;
   return {
     title: opts.title,
@@ -22,8 +23,8 @@ export function pageMeta(opts: { title: string; description: string; path: strin
       locale: 'sk_SK',
       type: opts.type ?? 'website',
       ...(opts.type === 'article' && opts.publishedTime ? { publishedTime: opts.publishedTime } : {}),
-      images: [LOGO],
+      images: [opts.hero ? HERO : LOGO],
     },
-    twitter: { card: 'summary', title: full, description: opts.description, images: [LOGO.url] },
+    twitter: { card: opts.hero ? 'summary_large_image' : 'summary', title: full, description: opts.description, images: [opts.hero ? HERO.url : LOGO.url] },
   };
 }

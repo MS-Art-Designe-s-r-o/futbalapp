@@ -20,14 +20,15 @@ export default function GaleriaPage() {
       <section className="section">
         <ul className="gallery-grid plain-list">
           <li className="gallery-tile art">
-            <Image className="tile-bg" src="/verejne/hero-blue-crest.png" alt="Ilustračná grafika futbalistov v modrých dresoch (vytvorená pomocou AI)" fill sizes="(max-width: 800px) 100vw, 50vw" quality={70} />
+            <Image className="tile-bg" src="/verejne/hero-bg.jpg" alt="Ilustračná fotografia troch chlapcov v dresoch na štadióne (AI vizualizácia)" fill sizes="(max-width: 800px) 100vw, 50vw" quality={75} />
             <span className="label">VIZUÁLNY KONCEPT · AI</span>
             <h2>NOVÁ GENERÁCIA</h2>
-            <p>Ilustrácia vytvorená pomocou AI, fiktívni hráči v koncepte klubového dresu. Nejde o členov klubu.</p>
+            <p>Ilustračná fotografia · AI vizualizácia. Nejde o členov klubu.</p>
           </li>
           {ALBUMS.map(([u, h, p]) => (
             <li key={u} className="gallery-tile-li">
-              <ExtLink href={CLUB_BASE + u} className="gallery-tile">
+              <ExtLink href={CLUB_BASE + u} className={u === 'galeria-hraci.html' ? 'gallery-tile art' : 'gallery-tile'}>
+                {u === 'galeria-hraci.html' && <Image className="tile-bg" src="/verejne/team-photo.jpg" alt="Ilustračná fotografia skupiny chlapcov v dresoch (AI vizualizácia)" fill sizes="(max-width: 800px) 100vw, 50vw" quality={75} />}
                 <span className="label">KLUBOVÝ ARCHÍV</span><h2>{h}</h2><p>{p} ↗</p>
               </ExtLink>
             </li>

@@ -10,7 +10,7 @@ import { SITE_URL } from '@/lib/verejne/site';
 
 export const dynamic = 'force-dynamic';
 export const metadata: Metadata = {
-  ...pageMeta({ title: 'FK Košická Nová Ves — Naša štvrť. Náš futbal.', description: 'FK Košická Nová Ves: mužstvá, zápasy, tréningy a novinky z klubu.', path: '/' }),
+  ...pageMeta({ title: 'FK Košická Nová Ves — Naša štvrť. Náš futbal.', description: 'FK Košická Nová Ves: mužstvá, zápasy, tréningy a novinky z klubu.', path: '/', hero: true }),
   title: { absolute: 'FK Košická Nová Ves — Naša štvrť. Náš futbal.' },
 };
 
@@ -45,7 +45,7 @@ export default async function Home() {
     <>
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON_LD }} />
       <section className="hero">
-        <Image className="hero-bg" src="/verejne/hero-blue-crest.png" alt="" fill priority sizes="100vw" quality={70} />
+        <Image className="hero-bg" src="/verejne/hero-bg.jpg" alt="" fill priority sizes="100vw" quality={75} />
         <div className="hero-grid" />
         <div>
           <div className="eyebrow">KOŠICKÁ NOVÁ VES · OD ROKU 1935</div>
@@ -57,7 +57,7 @@ export default async function Home() {
           </div>
         </div>
         <div className="hero-number"><strong>1935</strong><small>TRADÍCIA, KTORÁ ŽIJE.</small></div>
-        <span className="hero-caption">AI vizualizácia · fiktívni hráči · koncept dresu FK KNV</span>
+        <span className="hero-caption">Ilustračná fotografia · AI vizualizácia, nejde o členov klubu</span>
       </section>
 
       <div className="strip">
@@ -102,7 +102,7 @@ export default async function Home() {
             <Link href="/muzstva" className="text-link">Preskúmaj mužstvá <span>↗</span></Link>
           </div>
           <figure className="team-art">
-            <Image src="/verejne/hero-blue-crest.png" alt="Ilustračná grafika futbalistov v modrých dresoch" fill sizes="(max-width: 800px) 100vw, 60vw" quality={70} />
+            <Image src="/verejne/team-photo.jpg" alt="Skupina siedmich chlapcov v klubových dresoch pózuje na štadióne" fill sizes="(max-width: 800px) 100vw, 60vw" quality={75} />
             <figcaption>Ilustračná grafika – AI vizualizácia, nejde o členov klubu</figcaption>
           </figure>
         </div>
