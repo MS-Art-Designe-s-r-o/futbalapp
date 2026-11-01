@@ -15,7 +15,13 @@ interface Team {
   teamCategory: { code: string };
 }
 
-type Mode = 'training' | 'match';
+type Mode = 'training' | 'match' | 'tournament';
+
+interface Club {
+  id: string;
+  name: string;
+  logoUrl: string | null;
+}
 
 export default function NewEventScreen() {
   const router = useRouter();
@@ -42,10 +48,16 @@ export default function NewEventScreen() {
   const [surface, setSurface] = useState('');
   const [endTouched, setEndTouched] = useState(false);
   const [clash, setClash] = useState('');
+  const [clubs, setClubs] = useState<Club[]>([]);
+  const [picked, setPicked] = useState<string[]>([]);
+  const [clubQuery, setClubQuery] = useState('');
+  const [newClub, setNewClub] = useState('');
+  const [address, setAddress] = useState('');
 
   useEffect(() => {
     fetchMe().then(setMe).catch(() => {});
     api<Team[]>('/seasons/teams').then(setTeams).catch(() => {});
+    api<Club[]>('/clubs').then(setClubs).catch(() => {});
     fetchPitches()
       .then((p) => {
         setPitches(p);
@@ -68,17 +80,35 @@ export default function NewEventScreen() {
   const categoryCode = teams.find((t) => t.id === teamId)?.teamCategory.code;
   useEffect(() => {
     if (endTouched || !isHhmm(startTime)) return;
-    setEndTime(addMinutesToHhmm(startTime, defaultEventMinutes(mode === 'training' ? 'TRAINING' : 'MATCH', categoryCode)));
+    setEndTime(addMinutesToHhmm(startTime, defaultEventMinutes(mode === 'training' ? 'TRAINING' : mode === 'tournament' ? 'TOURNAMENT' : 'MATCH', categoryCode)));
   }, [startTime, mode, categoryCode, endTouched]);
 
   // zápas vonku nemá domáce ihrisko
-  const usePitch = !!pitchId && (mode === 'training' || isHome);
+  const usePitch = mode !== 'tournament' && !!pitchId && (mode === 'training' || isHome);
 
   function toggleDay(d: number) {
     setWeekdays((prev) => (prev.includes(d) ? prev.filter((x) => x !== d) : [...prev, d]));
   }
 
+  function togglePicked(name: string) {
+    setPicked((prev) => (prev.some((x) => x.toLowerCase() === name.toLowerCase()) ? prev.filter((x) => x.toLowerCase() !== name.toLowerCase()) : [...prev, name]));
+  }
+
+  function addNewClub() {
+    const name = newClub.trim();
+    if (!name) return;
+    setPicked((prev) => (prev.some((x) => x.toLowerCase() === name.toLowerCase()) ? prev : [...prev, name]));
+    setNewClub('');
+  }
+
+  const shownClubs = useMemo(() => {
+    const q = clubQuery.trim().toLowerCase();
+    return clubs.filter((c) => !q || c.name.toLowerCase().includes(q)).slice(0, 30);
+  }, [clubs, clubQuery]);
+
   function validate(): string | null {
+    if (mode === 'tournament' && !title.trim()) return 'Zadajte názov turnaja';
+    if (mode === 'tournament' && !/^\d{4}-\d{2}-\d{2}$/.test(date)) return 'Dátum zadajte ako RRRR-MM-DD';
     if (!isHhmm(startTime)) return 'Začiatok zadajte ako HH:MM';
     if (endTime && !isHhmm(endTime)) return 'Koniec zadajte ako HH:MM';
     if (usePitch && !endTime) return 'Pri vybranom ihrisku zadajte koniec';
@@ -105,6 +135,22 @@ export default function NewEventScreen() {
           method: 'POST',
           body: JSON.stringify({ title, teamId, weekdays, startTime: st, endTime: en || undefined, from, until, ...place }),
         });
+      } else if (mode === 'tournament') {
+        const created = await api<{ id: string }>('/events', {
+          method: 'POST',
+          body: JSON.stringify({
+            type: 'TOURNAMENT',
+            title: title.trim(),
+            teamId,
+            startAt: `${date}T${st}:00.000Z`,
+            endAt: en ? `${date}T${en}:00.000Z` : undefined,
+            location: location || undefined,
+            address: address || undefined,
+            participants: picked,
+          }),
+        });
+        router.replace(`/tournament/${created.id}`);
+        return;
       } else if (mode === 'training') {
         await api('/events', {
           method: 'POST',
@@ -158,6 +204,15 @@ export default function NewEventScreen() {
         </Pressable>
         <Pressable style={chip(mode === 'match')} onPress={() => setMode('match')}>
           <Text style={chipTxt(mode === 'match')}>Zápas</Text>
+        </Pressable>
+        <Pressable
+          style={chip(mode === 'tournament')}
+          onPress={() => {
+            setMode('tournament');
+            if (title === 'Tréning') setTitle('');
+          }}
+        >
+          <Text style={chipTxt(mode === 'tournament')}>Turnaj</Text>
         </Pressable>
       </View>
 
@@ -214,6 +269,55 @@ export default function NewEventScreen() {
             </View>
           </View>
         </>
+      ) : mode === 'tournament' ? (
+        <>
+          <Text style={styles.label}>Názov turnaja</Text>
+          <TextInput {...inputProps} style={styles.input} value={title} onChangeText={setTitle} placeholder="Jesenný turnaj" />
+          <Text style={styles.label}>Zúčastnené mužstvá ({picked.length})</Text>
+          {picked.length > 0 && (
+            <View style={styles.wrapRow}>
+              {picked.map((n) => (
+                <Pressable key={n} style={chip(true)} onPress={() => togglePicked(n)}>
+                  <Text style={chipTxt(true)}>{n} ✕</Text>
+                </Pressable>
+              ))}
+            </View>
+          )}
+          <TextInput {...inputProps} style={[styles.input, { marginTop: 8 }]} value={clubQuery} onChangeText={setClubQuery} placeholder="Hľadať mužstvo…" />
+          <View style={styles.wrapRow}>
+            {shownClubs.map((c) => {
+              const on = picked.some((x) => x.toLowerCase() === c.name.toLowerCase());
+              return (
+                <Pressable key={c.id} style={chip(on)} onPress={() => togglePicked(c.name)}>
+                  <Text style={chipTxt(on)}>{on ? '✓ ' : ''}{c.name}</Text>
+                </Pressable>
+              );
+            })}
+          </View>
+          <Text style={styles.label}>Pridať nové mužstvo</Text>
+          <View style={styles.row}>
+            <TextInput {...inputProps} style={[styles.input, { flex: 1 }]} value={newClub} onChangeText={setNewClub} onSubmitEditing={addNewClub} placeholder="Názov mužstva" />
+            <Pressable style={[styles.chip, { justifyContent: 'center' }]} onPress={addNewClub}>
+              <Text style={styles.chipText}>Pridať</Text>
+            </Pressable>
+          </View>
+          <Text style={styles.label}>Dátum (RRRR-MM-DD)</Text>
+          <TextInput {...inputProps} style={styles.input} value={date} onChangeText={setDate} placeholder="2026-09-12" />
+          <View style={styles.row}>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.label}>Začiatok</Text>
+              <TextInput {...inputProps} style={styles.input} value={startTime} onChangeText={setStartTime} placeholder="09:00" />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.label}>Koniec</Text>
+              <TextInput {...inputProps} style={styles.input} value={endTime} onChangeText={(v) => { setEndTouched(true); setEndTime(v); }} placeholder="15:00" />
+            </View>
+          </View>
+          <Text style={styles.label}>Miesto</Text>
+          <TextInput {...inputProps} style={styles.input} value={location} onChangeText={setLocation} placeholder="Ihrisko KNV" />
+          <Text style={styles.label}>Adresa</Text>
+          <TextInput {...inputProps} style={styles.input} value={address} onChangeText={setAddress} placeholder="Ulica 1, Komárno" />
+        </>
       ) : (
         <>
           <View style={styles.row}>
@@ -267,7 +371,7 @@ export default function NewEventScreen() {
         </>
       )}
 
-      {mode === 'match' && !isHome ? null : (
+      {mode === 'tournament' || (mode === 'match' && !isHome) ? null : (
         <>
           <Text style={styles.label}>Ihrisko</Text>
           <View style={styles.wrapRow}>
@@ -288,7 +392,7 @@ export default function NewEventScreen() {
         </>
       )}
       {!!clash && <Text style={styles.clash}>{clash}</Text>}
-      {!usePitch && (
+      {!usePitch && mode !== 'tournament' && (
         <>
           <Text style={styles.label}>Miesto</Text>
           <TextInput {...inputProps} style={styles.input} value={location} onChangeText={setLocation} placeholder="Ihrisko KNV" />
