@@ -23,6 +23,13 @@ interface TournamentMatch {
   scoreUs: number | null;
   scoreThem: number | null;
   address?: string | null;
+  nominatedCount?: number;
+}
+interface Candidate {
+  id: string;
+  firstName: string;
+  lastName: string;
+  nominated: boolean;
 }
 interface Tournament {
   event: {
@@ -37,6 +44,7 @@ interface Tournament {
   };
   participants: Array<{ id: string; clubName: string; logoUrl: string | null; sortOrder: number }>;
   matches: TournamentMatch[];
+  nominations?: Array<{ memberId: string; firstName: string; lastName: string }>;
 }
 
 const STATE_LABELS: Record<string, string> = {
@@ -92,6 +100,13 @@ export default function TournamentPage({ params }: { params: Promise<{ id: strin
   const [matchError, setMatchError] = useState<string | null>(null);
   const [listError, setListError] = useState<string | null>(null);
 
+  // nominácia na turnaj
+  const [candidates, setCandidates] = useState<Candidate[]>([]);
+  const [candSearch, setCandSearch] = useState('');
+  const [nomBusy, setNomBusy] = useState<string | null>(null);
+  const [nomError, setNomError] = useState<string | null>(null);
+  const [nomInfo, setNomInfo] = useState<string | null>(null);
+
   const load = useCallback(async () => {
     try {
       const data = await api<Tournament>(`/tournaments/${id}`);
@@ -105,6 +120,36 @@ export default function TournamentPage({ params }: { params: Promise<{ id: strin
   useEffect(() => {
     void load();
   }, [load]);
+  const canNominate = !!t && canManageTeam(me, t.event.team?.id ?? t.event.teamId);
+  const loadCandidates = useCallback(async () => {
+    try {
+      setCandidates(await api<Candidate[]>(`/tournaments/${id}/candidates`));
+    } catch (e) {
+      setNomError(e instanceof Error ? e.message : 'Načítanie hráčov zlyhalo');
+    }
+  }, [id]);
+  useEffect(() => {
+    if (canNominate) void loadCandidates();
+  }, [canNominate, loadCandidates]);
+
+  async function toggleNomination(c: Candidate) {
+    if (c.nominated && !window.confirm(`Zrušiť nomináciu hráča ${c.firstName} ${c.lastName} na turnaj?`)) return;
+    setNomBusy(c.id);
+    setNomError(null);
+    setNomInfo(null);
+    try {
+      const r = await api<{ memberId: string; matchesUpdated: number }>(
+        c.nominated ? `/tournaments/${id}/nominations/${c.id}` : `/tournaments/${id}/nominations`,
+        c.nominated ? { method: 'DELETE' } : { method: 'POST', body: JSON.stringify({ memberId: c.id }) },
+      );
+      setNomInfo(`Nominácia sa prenesie do všetkých zápasov turnaja (${r.matchesUpdated} zápasov)`);
+      await Promise.all([load(), loadCandidates()]);
+    } catch (e) {
+      setNomError(e instanceof Error ? e.message : 'Akcia zlyhala');
+    } finally {
+      setNomBusy(null);
+    }
+  }
   useEffect(() => {
     api<ClubOption[]>('/clubs').then(setClubs).catch(() => {});
   }, []);
@@ -203,6 +248,11 @@ export default function TournamentPage({ params }: { params: Promise<{ id: strin
   const ev = t.event;
   const manage = canManageTeam(me, ev.team?.id ?? ev.teamId);
   const participantNames = t.participants.map((p) => p.clubName);
+  const nominations = t.nominations ?? [];
+  const q = candSearch.trim().toLowerCase();
+  const shownCandidates = q
+    ? candidates.filter((c) => `${c.firstName} ${c.lastName}`.toLowerCase().includes(q))
+    : candidates;
 
   return (
     <div className="space-y-5">
@@ -274,6 +324,79 @@ export default function TournamentPage({ params }: { params: Promise<{ id: strin
         )}
       </section>
 
+      <section aria-labelledby="nom-h">
+        <h2 id="nom-h" className="mb-2 font-bold text-club-900">
+          Nominácia na turnaj ({nominations.length})
+        </h2>
+        {nominations.length === 0 ? (
+          <Card className="text-sm text-gray-500">Zatiaľ nie je nominovaný nikto.</Card>
+        ) : (
+          !manage && (
+            <ul className="grid gap-1 border border-club-100 bg-white p-2 sm:grid-cols-2">
+              {nominations.map((n) => (
+                <li key={n.memberId} className="px-2 py-1 text-sm text-club-900">
+                  {n.firstName} {n.lastName}
+                </li>
+              ))}
+            </ul>
+          )
+        )}
+        {manage && (
+          <Card className="mt-2 space-y-3">
+            <p className="text-sm text-gray-600">
+              Nominácia sa prenesie do všetkých zápasov turnaja. V jednotlivom zápase možno nomináciu ďalej upraviť (číslo dresu,
+              základná zostava); odohrané zápasy sa nemenia.
+            </p>
+            <div>
+              <label htmlFor="nom-search" className={labelCls}>
+                Hľadať hráča družstva
+              </label>
+              <input
+                id="nom-search"
+                type="search"
+                value={candSearch}
+                onChange={(e) => setCandSearch(e.target.value)}
+                placeholder="Meno alebo priezvisko"
+                className={inputCls}
+              />
+            </div>
+            <div role="status" aria-live="polite">
+              {nomInfo && <p className="text-sm text-green-700">{nomInfo}</p>}
+            </div>
+            <div role="alert">
+              <ErrorText>{nomError}</ErrorText>
+            </div>
+            {candidates.length === 0 ? (
+              <p className="text-sm text-gray-500">Družstvo nemá žiadnych aktívnych hráčov.</p>
+            ) : shownCandidates.length === 0 ? (
+              <p className="text-sm text-gray-500">Nikto nezodpovedá hľadaniu.</p>
+            ) : (
+              <ul className="divide-y divide-club-100 border border-club-100 bg-white">
+                {shownCandidates.map((c) => (
+                  <li key={c.id} className="flex items-center justify-between gap-3 px-4 py-2">
+                    <span className="text-sm text-club-900">
+                      {c.firstName} {c.lastName}
+                      {c.nominated && <span className="ml-2 text-xs font-semibold text-green-700">nominovaný</span>}
+                    </span>
+                    <Button
+                      variant={c.nominated ? 'danger' : 'primary'}
+                      disabled={nomBusy !== null}
+                      onClick={() => toggleNomination(c)}
+                    >
+                      {nomBusy === c.id ? 'Ukladám…' : c.nominated ? 'zrušiť nomináciu' : '+ nominovať'}
+                      <span className="sr-only">
+                        {' '}
+                        {c.firstName} {c.lastName}
+                      </span>
+                    </Button>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </Card>
+        )}
+      </section>
+
       <section>
         <h2 className="mb-2 font-bold text-club-900">Zápasy turnaja</h2>
         <ErrorText>{listError}</ErrorText>
@@ -295,6 +418,7 @@ export default function TournamentPage({ params }: { params: Promise<{ id: strin
                       {m.endAt ? `–${formatEventTimeSk(m.endAt)}` : ''}
                       {m.location ? ` · ${m.location}` : ''} · {STATE_LABELS[m.state] ?? m.state}
                       {hasScore ? ` · ${m.scoreUs}:${m.scoreThem}` : ''}
+                      {m.nominatedCount !== undefined ? ` · nominovaných: ${m.nominatedCount}` : ''}
                     </div>
                   </div>
                   <div className="flex flex-wrap items-center gap-2">
