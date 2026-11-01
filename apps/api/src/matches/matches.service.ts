@@ -43,7 +43,8 @@ export class MatchesService {
     const match = await this.prisma.match.findUnique({
       where: { id },
       include: {
-        event: { include: { team: { include: { teamCategory: true } } } },
+        // parent = turnaj, ku ktorému zápas patrí (zápas turnaja); parentEventId/tournamentOrder sú v event
+        event: { include: { team: { include: { teamCategory: true } }, parent: { select: { id: true, title: true } } } },
         nominations: {
           where: { status: { not: 'REMOVED' } },
           include: { member: { select: { id: true, firstName: true, lastName: true } } },
@@ -98,7 +99,18 @@ export class MatchesService {
         jerseyColor: true,
         videoUrl: true,
         highlightsUrl: true,
-        event: { select: { title: true, startAt: true, location: true, address: true, team: { select: { name: true } } } },
+        event: {
+          select: {
+            title: true,
+            startAt: true,
+            location: true,
+            address: true,
+            team: { select: { name: true } },
+            parentEventId: true,
+            tournamentOrder: true,
+            parent: { select: { id: true, title: true } },
+          },
+        },
         photos: { select: { id: true }, orderBy: { createdAt: 'asc' } },
         videos: { select: { id: true, mimeType: true, title: true }, orderBy: { createdAt: 'asc' } },
       },

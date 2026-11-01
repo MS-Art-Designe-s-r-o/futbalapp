@@ -106,6 +106,8 @@ export class FutbalnetService {
         where: { futbalnetId: externalId },
         include: { match: true },
       });
+      // futbalnetId majú len importované zápasy; ručný/priateľský zápas sa nikdy neprepisuje
+      if (existing && (existing.source !== 'FUTBALNET' || existing.match?.isFriendly)) continue;
       if (existing) {
         await this.prisma.event.update({
           where: { id: existing.id },
@@ -152,6 +154,9 @@ export class FutbalnetService {
           source: 'FUTBALNET',
           startAt: { gte: from, lte: to },
           futbalnetId: { notIn: keptIds },
+          // poistky: nikdy nie zápas turnaja ani priateľský zápas
+          parentEventId: null,
+          NOT: { match: { isFriendly: true } },
         },
       });
       removed = res.count;
@@ -289,7 +294,9 @@ export class FutbalnetService {
       const title = match.isHome ? `${teamName} vs ${match.opponent}` : `${match.opponent} vs ${teamName}`;
       // sportnet/futbalnet dávajú absolútny čas → ulož ako bratislavský nástenný čas
       const startAt = toBratislavaWallClock(match.startAt);
-      const existing = await this.prisma.event.findUnique({ where: { futbalnetId } });
+      const existing = await this.prisma.event.findUnique({ where: { futbalnetId }, include: { match: true } });
+      // ručný/priateľský zápas sa nikdy neprepisuje
+      if (existing && (existing.source !== 'FUTBALNET' || existing.match?.isFriendly)) continue;
       if (existing) {
         await this.prisma.event.update({
           where: { id: existing.id },

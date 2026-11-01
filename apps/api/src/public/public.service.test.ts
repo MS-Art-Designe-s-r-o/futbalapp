@@ -537,3 +537,22 @@ describe('dokumenty', () => {
     expect(documentFileHeaders({ mimeType: 'image/png', originalFilename: 'f.png', size: 1 })['Content-Disposition']).toMatch(/^inline;/);
   });
 });
+
+describe('priateľský zápas a turnaj vo verejnom API', () => {
+  it('isFriendly → competition „Priateľský zápas"', () => {
+    const row = eventRow({ match: { ...eventRow().match!, isFriendly: true, competition: null } });
+    expect(toEventDto(row, CLUB)?.match?.competition).toBe('Priateľský zápas');
+    expect(toEventDto(eventRow(), CLUB)?.match?.competition).toBe('Liga');
+  });
+
+  it('select obsahuje isFriendly', async () => {
+    await service.events({} as never);
+    const arg = prisma.event.findMany.mock.calls[0]![0];
+    expect(allKeys(arg.select).has('isFriendly')).toBe(true);
+  });
+
+  it('turnaj bez Match → TOURNAMENT s match: null', () => {
+    const dto = toEventDto(eventRow({ type: 'TOURNAMENT', match: null }), CLUB);
+    expect(dto).toMatchObject({ type: 'TOURNAMENT', state: 'SCHEDULED', match: null });
+  });
+});

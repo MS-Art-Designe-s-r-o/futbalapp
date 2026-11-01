@@ -121,6 +121,20 @@ export const eventAddressSchema = z
   .nullish()
   .transform((v) => (v === undefined ? undefined : v === null || v === '' ? null : v));
 
+/// Zoznam klubov (účastníkov turnaja): orezané názvy 1–120 znakov, max 40, bez duplicít (bez ohľadu na veľkosť písmen).
+export const tournamentClubListSchema = z
+  .array(z.string().trim().min(1).max(120))
+  .max(40)
+  .transform((list) => {
+    const seen = new Set<string>();
+    return list.filter((name) => {
+      const key = name.toLocaleLowerCase('sk');
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+  });
+
 export const createEventSchema = z.object({
   type: z.enum(EVENT_TYPES),
   title: z.string().min(2).max(120),
@@ -139,6 +153,10 @@ export const createEventSchema = z.object({
   pitchId: z.string().optional(),
   opponent: z.string().max(120).optional(),
   isHome: z.boolean().optional(),
+  /// MATCH: priateľský zápas (nie je súčasťou súťaže SFZ; sync s futbalnetom ho nemení)
+  friendly: z.boolean().optional(),
+  /// TOURNAMENT: zúčastnené mužstvá (názvy klubov z registra; nové sa do registra doplnia)
+  participants: tournamentClubListSchema.optional(),
   /// farba dresu pri zápase: tmavý / svetlý
   jerseyColor: z.enum(['DARK', 'LIGHT']).optional(),
   /// zobraziť v kalendári na verejnom webe (platí len pre TRAINING)
@@ -147,6 +165,28 @@ export const createEventSchema = z.object({
   allowSharedPitch: z.boolean().optional(),
 });
 export type CreateEventInput = z.infer<typeof createEventSchema>;
+
+/// PUT /tournaments/:id/participants — nahradí zoznam účastníkov turnaja.
+export const tournamentParticipantsSchema = z.object({
+  clubs: tournamentClubListSchema,
+});
+export type TournamentParticipantsInput = z.infer<typeof tournamentParticipantsSchema>;
+
+/// POST /tournaments/:id/matches — zápas turnaja so zvoleným účastníkom (súperom).
+export const createTournamentMatchSchema = z.object({
+  opponent: z.string().trim().min(1).max(120),
+  /// poradie zápasu v turnaji (1. zápas, 2. zápas …); predvolene ďalšie v poradí
+  order: z.number().int().min(1).max(999).optional(),
+  startAt: z.coerce.date().optional(),
+  endAt: z.coerce.date().optional(),
+  location: z.string().max(200).optional(),
+  address: eventAddressSchema,
+});
+export type CreateTournamentMatchInput = z.infer<typeof createTournamentMatchSchema>;
+
+/// PATCH /tournaments/:id/matches/:eventId
+export const updateTournamentMatchSchema = createTournamentMatchSchema.partial();
+export type UpdateTournamentMatchInput = z.infer<typeof updateTournamentMatchSchema>;
 
 /// Hracia plocha klubu (nastavenia): názov + povrch.
 export const createPitchSchema = z.object({

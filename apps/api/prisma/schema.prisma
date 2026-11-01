@@ -607,6 +607,10 @@ model Event {
   futbalnetId String?  @unique
   /// Spoločné ID pre všetky výskyty opakovaného tréningu (napr. utorky+piatky)
   recurrenceGroupId String?
+  /// Zápas turnaja: odkaz na udalosť turnaja (TOURNAMENT). Zmazanie turnaja zmaže aj jeho zápasy.
+  parentEventId   String?
+  /// Poradie zápasu v rámci turnaja (1. zápas, 2. zápas …)
+  tournamentOrder Int?
   createdById String?
   createdAt   DateTime @default(now())
 
@@ -619,10 +623,30 @@ model Event {
   /// družstiev naraz). Prázdne = celoklubová udalosť. Používa sa nad rámec
   /// jediného `teamId` pri udalostiach smerovaných na viacero družstiev.
   audienceTeams Team[]     @relation("EventAudience")
+  parent        Event?     @relation("TournamentMatches", fields: [parentEventId], references: [id], onDelete: Cascade)
+  /// Zápasy turnaja (len pri type TOURNAMENT)
+  children      Event[]    @relation("TournamentMatches")
+  /// Účastníci (súperi) turnaja (len pri type TOURNAMENT)
+  tournamentParticipants TournamentParticipant[]
 
   @@index([teamId, startAt])
   @@index([recurrenceGroupId])
   @@index([pitchId, startAt])
+  @@index([parentEventId])
+}
+
+/// Mužstvo (klub z registra Club) zúčastnené na turnaji; súper pre zápasy turnaja.
+model TournamentParticipant {
+  id        String  @id @default(cuid())
+  eventId   String
+  clubName  String
+  /// kópia Club.logoUrl v čase pridania
+  logoUrl   String?
+  sortOrder Int     @default(0)
+
+  event Event @relation(fields: [eventId], references: [id], onDelete: Cascade)
+
+  @@unique([eventId, clubName])
 }
 
 /// Hracia plocha klubu (názov + povrch); ponúka sa pri tvorbe tréningu/zápasu a
@@ -709,6 +733,8 @@ model Match {
   opponentLogo String?
   opponent    String
   isHome      Boolean    @default(true)
+  /// Priateľský zápas (nie je súčasťou súťaže SFZ) — synchronizácia s futbalnetom ho nemení.
+  isFriendly  Boolean    @default(false)
   competition String?
   scoreUs     Int?
   scoreThem   Int?

@@ -10,6 +10,7 @@ import type {
   PublicEventState,
   PublicSeasonDto,
 } from '@fkknv/shared';
+import { FRIENDLY_MATCH_LABEL_SK } from '@fkknv/shared';
 
 /**
  * Explicitný výber polí pre verejné API. Nič mimo týchto `select`-ov sa z DB
@@ -41,7 +42,7 @@ export const PUBLIC_EVENT_SELECT = {
     select: { id: true, name: true, teamCategory: { select: { code: true, name: true } } },
   },
   match: {
-    select: { opponent: true, opponentLogo: true, isHome: true, competition: true, scoreUs: true, scoreThem: true, state: true },
+    select: { opponent: true, opponentLogo: true, isHome: true, isFriendly: true, competition: true, scoreUs: true, scoreThem: true, state: true },
   },
 } as const;
 
@@ -151,6 +152,8 @@ export interface PublicEventRow {
     opponent: string;
     opponentLogo?: string | null;
     isHome: boolean;
+    /** priateľský zápas → súťaž sa zobrazí ako „Priateľský zápas" */
+    isFriendly?: boolean;
     competition: string | null;
     scoreUs: number | null;
     scoreThem: number | null;
@@ -197,7 +200,7 @@ export function toEventDto(
       isHome: home,
       opponent: e.match.opponent,
       opponentLogoUrl: safeLogoUrl(e.match.opponentLogo) ?? safeLogoUrl(clubLogos.get(e.match.opponent)),
-      competition: e.match.competition,
+      competition: e.match.isFriendly ? FRIENDLY_MATCH_LABEL_SK : e.match.competition,
       homeScore: home ? scoreUs : scoreThem,
       awayScore: home ? scoreThem : scoreUs,
     };

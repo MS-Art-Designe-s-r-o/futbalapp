@@ -31,12 +31,14 @@ export class MatchSyncService {
     const matches = await this.prisma.match.findMany({
       where: {
         state: { not: 'CANCELLED' },
+        isFriendly: false,
         event: { startAt: { gte: from, lt: to }, OR: [{ futbalnetId: { startsWith: 'sn:' } }] },
       },
       select: { id: true },
     });
     const withUrl = await this.prisma.match.findMany({
-      where: { state: { not: 'CANCELLED' }, sportnetUrl: { not: null }, event: { startAt: { gte: from, lt: to } } },
+      // priateľské zápasy nie sú súčasťou SFZ → sync ich nikdy nemení
+      where: { state: { not: 'CANCELLED' }, isFriendly: false, sportnetUrl: { not: null }, event: { startAt: { gte: from, lt: to } } },
       select: { id: true },
     });
     const ids = [...new Set([...matches, ...withUrl].map((m) => m.id))];
@@ -52,8 +54,9 @@ export class MatchSyncService {
 
   /** Ručné spustenie z detailu zápasu; voliteľne s odkazom na zápas (nalinkuje ho). */
   async syncManual(matchId: string, user: AuthUser, url?: string) {
-    const match = await this.prisma.match.findUnique({ where: { id: matchId }, select: { event: { select: { teamId: true } } } });
+    const match = await this.prisma.match.findUnique({ where: { id: matchId }, select: { isFriendly: true, event: { select: { teamId: true } } } });
     if (!match) throw new NotFoundException('Zápas neexistuje');
+    if (match.isFriendly) throw new BadRequestException('Priateľský zápas nie je súčasťou súťaže SFZ — so futbalnetom sa nesynchronizuje.');
     if (coachBlockedFromTeam(user, match.event.teamId)) throw new ForbiddenException('Zápas môžete synchronizovať len pre svoje družstvo');
     if (url) {
       const ref = parseSportnetMatchUrl(url);
@@ -95,6 +98,8 @@ export class MatchSyncService {
       },
     });
     if (!match) throw new NotFoundException('Zápas neexistuje');
+    // poistka: priateľský zápas (mimo SFZ) sa nikdy neprepisuje údajmi z futbalnetu
+    if (match.isFriendly) return { status: 'NO_RESULT', changes: ['Priateľský zápas — so futbalnetom sa nesynchronizuje.'] };
     const log = async (status: SyncStatus, changes: string[]) => {
       if (source === 'CRON' && status === 'NO_CHANGE') return;
       await this.prisma.matchSyncLog.create({ data: { matchId, source, status, changes } });

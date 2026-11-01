@@ -19,6 +19,9 @@ export const EVENT_TYPE_LABELS_SK: Record<EventType, string> = {
   PARENT_MEETING: 'Rodičovské združenie',
 };
 
+/** Označenie priateľského zápasu (Match.isFriendly) — napr. namiesto súťaže. */
+export const FRIENDLY_MATCH_LABEL_SK = 'Priateľský zápas';
+
 /** Povrch ihriska. */
 export const SURFACE_CODES = ['PT', 'UT', 'VT', 'MT', 'MI'] as const;
 export type SurfaceCode = (typeof SURFACE_CODES)[number];

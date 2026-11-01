@@ -12,6 +12,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { ClubsService } from '../clubs/clubs.service';
 import { EmailService } from '../notifications/email.service';
 import { bySlovakName } from '../members/members.service';
+import { resolveParticipantClubs } from './tournament-clubs';
 import { canManageTeam, coachBlockedFromTeam, coachTeamIds, isDemoScope, isStaff } from '../auth/scope';
 import type { AuthUser } from '../auth/current-user.decorator';
 
@@ -30,6 +31,8 @@ const EVENT_INCLUDE = {
   match: true,
   pitch: { select: { id: true, name: true, surface: true } },
   audienceTeams: { select: { id: true, name: true }, orderBy: { sortOrder: 'asc' } },
+  /// zápas turnaja → odkaz späť na turnaj
+  parent: { select: { id: true, title: true } },
 } as const;
 
 @Injectable()
@@ -310,7 +313,11 @@ export class EventsService {
     const season = await this.prisma.season.findFirst({ where: { isActive: true } });
     if (!season) throw new BadRequestException('Neexistuje aktívna sezóna');
     const team = await this.resolveTeam(input.teamId);
-    const isMatch = input.type === 'MATCH' || input.type === 'TOURNAMENT';
+    // Turnaj nemá vlastný Match (zápasy turnaja sú samostatné udalosti MATCH s parentEventId).
+    // Spätná kompatibilita: starý klient posielal turnaj so súperom → vznikne Match ako doteraz.
+    const legacyTournament = input.type === 'TOURNAMENT' && !!input.opponent?.trim() && !input.participants?.length;
+    const isMatch = input.type === 'MATCH' || legacyTournament;
+    if (input.type === 'TOURNAMENT' && !legacyTournament && !team) throw new BadRequestException('Vyberte družstvo turnaja');
     const pitch = await this.resolvePitch(input.pitchId);
     this.assertEndAfterStart(input.startAt, input.endAt, !!pitch);
     const slots = [{ startAt: input.startAt, endAt: input.endAt }];
@@ -349,6 +356,8 @@ export class EventsService {
               create: {
                 opponent: input.opponent ?? 'Neznámy súper',
                 isHome: input.isHome ?? true,
+                // priateľský zápas: vždy interný (source INTERNAL, bez futbalnetId) — sync ho nemení
+                isFriendly: input.type === 'MATCH' && !!input.friendly,
                 jerseyColor: input.jerseyColor ?? null,
                 opponentLogo,
               },
@@ -358,6 +367,14 @@ export class EventsService {
       },
       include: { match: true },
     });
+
+    if (input.type === 'TOURNAMENT' && input.participants?.length) {
+      const rows = await resolveParticipantClubs(this.prisma, this.clubs, input.participants);
+      await this.prisma.tournamentParticipant.createMany({
+        data: rows.map((r, i) => ({ eventId: event.id, clubName: r.clubName, logoUrl: r.logoUrl, sortOrder: i })),
+        skipDuplicates: true,
+      });
+    }
 
     if (input.type === 'TRAINING' && team) {
       await this.prepareAttendance(event.id, team.id, season.id);
@@ -472,6 +489,10 @@ export class EventsService {
         isPublic: event.type === 'TRAINING' ? input.isPublic : undefined,
       },
     });
+    // priateľský zápas sa dá prepnúť len pri internom zápase (futbalnet zápas je vždy súťažný)
+    if (input.friendly !== undefined && event.type === 'MATCH' && event.source === 'INTERNAL') {
+      await this.prisma.match.updateMany({ where: { eventId }, data: { isFriendly: input.friendly } });
+    }
     // zmena termínu → e-mail dotknutým (chyba pri odosielaní nesmie zhodiť uloženie)
     const time = (d: Date | null) => (d ? d.getTime() : null);
     if (time(event.startAt) !== time(updated.startAt) || time(event.endAt) !== time(updated.endAt)) {
