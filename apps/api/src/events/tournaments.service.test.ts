@@ -68,15 +68,32 @@ function tournament(over: Record<string, unknown> = {}) {
       { id: 'tp2', clubName: 'Slavia', logoUrl: null, sortOrder: 1 },
     ],
     children: [] as ReturnType<typeof child>[],
+    tournamentNominations: [] as Array<{ memberId: string; member?: { id: string; firstName: string; lastName: string } }>,
     ...over,
   };
 }
 
-function makeTournaments(t: ReturnType<typeof tournament> | null) {
+const baseMember = {
+  id: 'mb1',
+  isDemo: false,
+  status: 'ACTIVE',
+  userId: 'pu1',
+  firstName: 'Ján',
+  lastName: 'Novák',
+  guardians: [{ userId: 'g1' }],
+  memberships: [{ id: 'ms1' }],
+};
+
+function makeTournaments(
+  t: ReturnType<typeof tournament> | null,
+  member: Record<string, unknown> | null = baseMember,
+  members: unknown[] = [],
+) {
   const reg = clubRegistry([
     { name: 'Lokomotíva', logoUrl: 'https://x/l.png' },
     { name: 'Slavia', logoUrl: null },
   ]);
+  const push = { notifyUsers: vi.fn(async () => undefined) };
   const prisma = {
     club: reg.club,
     event: {
@@ -86,6 +103,12 @@ function makeTournaments(t: ReturnType<typeof tournament> | null) {
       delete: vi.fn(async () => ({})),
     },
     match: { update: vi.fn(async () => ({})) },
+    member: { findUnique: vi.fn(async () => member), findMany: vi.fn(async () => members) },
+    tournamentNomination: { upsert: vi.fn(async () => ({})), deleteMany: vi.fn(async () => ({ count: 1 })) },
+    matchNomination: {
+      upsert: vi.fn(async () => ({})),
+      updateMany: vi.fn(async () => ({ count: 2 })),
+    },
     tournamentParticipant: {
       deleteMany: vi.fn(() => 'del'),
       update: vi.fn(() => 'upd'),
@@ -93,7 +116,7 @@ function makeTournaments(t: ReturnType<typeof tournament> | null) {
     },
     $transaction: vi.fn(async (ops: unknown[]) => ops),
   };
-  return { prisma, reg, service: new TournamentsService(prisma as never, reg.clubs as never) };
+  return { prisma, reg, push, service: new TournamentsService(prisma as never, reg.clubs as never, push as never) };
 }
 
 describe('zmluva (zod)', () => {
@@ -260,5 +283,67 @@ describe('zápasy turnaja', () => {
     expect(prisma.tournamentParticipant.create).toHaveBeenCalledWith({
       data: { eventId: 'tr1', clubName: 'Nový FK', logoUrl: null, sortOrder: 1 },
     });
+  });
+});
+
+describe('nominácia turnaja', () => {
+  const threeMatches = () => [
+    child('a', 1, 'Slavia', '2030-05-01T09:00:00Z'),
+    child('b', 2, 'Slavia', '2030-05-01T10:00:00Z', { state: 'LIVE' }),
+    child('c', 3, 'Slavia', '2030-05-01T11:00:00Z', { state: 'FINISHED' }),
+  ];
+
+  it('pridanie propaguje do PLANNED/LIVE, nie FINISHED, a pošle jeden push', async () => {
+    const { service, prisma, push } = makeTournaments(tournament({ children: threeMatches(), tournamentNominations: [] } as never));
+    const r = await service.nominate('tr1', 'mb1', admin);
+    expect(r).toEqual({ memberId: 'mb1', matchesUpdated: 2 });
+    const ids = prisma.matchNomination.upsert.mock.calls.map((c) => (c[0] as { create: { matchId: string } }).create.matchId);
+    expect(ids).toEqual(['m-a', 'm-b']);
+    expect(prisma.tournamentNomination.upsert).toHaveBeenCalledTimes(1);
+    expect(push.notifyUsers).toHaveBeenCalledTimes(1);
+    expect((push.notifyUsers.mock.calls[0] as unknown[])[0]).toEqual(['g1', 'pu1']);
+  });
+
+  it('odobratie nastaví REMOVED len v PLANNED/LIVE a nepošle push', async () => {
+    const { service, prisma, push } = makeTournaments(tournament({ children: threeMatches(), tournamentNominations: [] } as never));
+    const r = await service.removeNomination('tr1', 'mb1', admin);
+    expect(r).toEqual({ memberId: 'mb1', matchesUpdated: 2 });
+    const arg = prisma.matchNomination.updateMany.mock.calls[0][0] as { where: { matchId: { in: string[] } }; data: unknown };
+    expect(arg.where.matchId.in).toEqual(['m-a', 'm-b']);
+    expect(arg.data).toEqual({ status: 'REMOVED' });
+    expect(prisma.tournamentNomination.deleteMany).toHaveBeenCalled();
+    expect(push.notifyUsers).not.toHaveBeenCalled();
+  });
+
+  it('nový zápas turnaja dostane nominovaných', async () => {
+    const { service, prisma } = makeTournaments(
+      tournament({ tournamentNominations: [{ memberId: 'mb1' }, { memberId: 'mb2' }] } as never),
+    );
+    await service.addMatch('tr1', { opponent: 'Slavia' } as never, admin);
+    const ids = prisma.matchNomination.upsert.mock.calls.map((c) => (c[0] as { create: { memberId: string; matchId: string } }).create);
+    expect(ids).toEqual([
+      { matchId: 'm-new', memberId: 'mb1', status: 'NOMINATED' },
+      { matchId: 'm-new', memberId: 'mb2', status: 'NOMINATED' },
+    ]);
+  });
+
+  it('cudzí tréner 403, nečlen družstva 400', async () => {
+    const a = makeTournaments(tournament({ tournamentNominations: [] } as never));
+    await expect(a.service.nominate('tr1', 'mb1', otherCoach)).rejects.toMatchObject({ status: 403 });
+    const b = makeTournaments(tournament({ tournamentNominations: [] } as never), { ...baseMember, memberships: [] });
+    await expect(b.service.nominate('tr1', 'mb1', admin)).rejects.toMatchObject({ status: 400 });
+    expect(b.prisma.tournamentNomination.upsert).not.toHaveBeenCalled();
+  });
+
+  it('candidates: nominovaní najprv, v skupinách abecedne', async () => {
+    const members = [
+      { id: '1', firstName: 'Zuzana', lastName: 'Čech' },
+      { id: '2', firstName: 'Adam', lastName: 'Zelený' },
+      { id: '3', firstName: 'Eva', lastName: 'Adamová' },
+      { id: '4', firstName: 'Ivan', lastName: 'Šťastný' },
+    ];
+    const { service } = makeTournaments(tournament({ tournamentNominations: [{ memberId: '2' }, { memberId: '4' }] } as never), baseMember, members);
+    const r = await service.candidates('tr1', admin);
+    expect(r.map((x) => [x.id, x.nominated])).toEqual([['4', true], ['2', true], ['3', false], ['1', false]]);
   });
 });

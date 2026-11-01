@@ -1,9 +1,11 @@
 import { Body, Controller, Delete, Get, Param, Patch, Post, Put } from '@nestjs/common';
 import {
   createTournamentMatchSchema,
+  tournamentNominationSchema,
   tournamentParticipantsSchema,
   updateTournamentMatchSchema,
   type CreateTournamentMatchInput,
+  type TournamentNominationInput,
   type TournamentParticipantsInput,
   type UpdateTournamentMatchInput,
 } from '@fkknv/shared';
@@ -57,5 +59,27 @@ export class TournamentsController {
   @Roles('ADMIN', 'MANAGER', 'COACH')
   removeMatch(@Param('id') id: string, @Param('eventId') eventId: string, @CurrentUser() user: AuthUser) {
     return this.tournaments.removeMatch(id, eventId, user);
+  }
+
+  @Get(':id/candidates')
+  @Roles('ADMIN', 'MANAGER', 'COACH')
+  candidates(@Param('id') id: string, @CurrentUser() user: AuthUser) {
+    return this.tournaments.candidates(id, user);
+  }
+
+  @Post(':id/nominations')
+  @Roles('ADMIN', 'MANAGER', 'COACH')
+  nominate(
+    @Param('id') id: string,
+    @Body(new ZodValidationPipe(tournamentNominationSchema)) body: TournamentNominationInput,
+    @CurrentUser() user: AuthUser,
+  ) {
+    return this.tournaments.nominate(id, body.memberId, user);
+  }
+
+  @Delete(':id/nominations/:memberId')
+  @Roles('ADMIN', 'MANAGER', 'COACH')
+  removeNomination(@Param('id') id: string, @Param('memberId') memberId: string, @CurrentUser() user: AuthUser) {
+    return this.tournaments.removeNomination(id, memberId, user);
   }
 }

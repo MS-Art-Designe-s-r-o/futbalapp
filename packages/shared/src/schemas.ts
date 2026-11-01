@@ -172,6 +172,10 @@ export const tournamentParticipantsSchema = z.object({
 });
 export type TournamentParticipantsInput = z.infer<typeof tournamentParticipantsSchema>;
 
+/** Nominácia hráča na turnaj (prenesie sa do zápasov turnaja). */
+export const tournamentNominationSchema = z.object({ memberId: z.string().min(1) });
+export type TournamentNominationInput = z.infer<typeof tournamentNominationSchema>;
+
 /// POST /tournaments/:id/matches — zápas turnaja so zvoleným účastníkom (súperom).
 export const createTournamentMatchSchema = z.object({
   opponent: z.string().trim().min(1).max(120),

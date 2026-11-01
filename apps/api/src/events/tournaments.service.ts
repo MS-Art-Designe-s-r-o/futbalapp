@@ -1,18 +1,22 @@
 import { BadRequestException, ConflictException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
-import type { CreateTournamentMatchInput, UpdateTournamentMatchInput } from '@fkknv/shared';
+import { formatEventDateTimeSk, type CreateTournamentMatchInput, type UpdateTournamentMatchInput } from '@fkknv/shared';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { ClubsService } from '../clubs/clubs.service';
+import { PushService } from '../notifications/push.service';
 import { canManageTeam } from '../auth/scope';
 import type { AuthUser } from '../auth/current-user.decorator';
 import { resolveParticipantClubs } from './tournament-clubs';
 
 const lower = (v: string) => v.trim().toLocaleLowerCase('sk');
+const byName = (a: { firstName: string; lastName: string }, b: { firstName: string; lastName: string }) =>
+  a.lastName.localeCompare(b.lastName, 'sk') || a.firstName.localeCompare(b.firstName, 'sk');
 
 const TOURNAMENT_INCLUDE = Prisma.validator<Prisma.EventInclude>()({
   team: { select: { id: true, name: true } },
   match: { select: { id: true } },
   tournamentParticipants: { orderBy: [{ sortOrder: 'asc' }, { clubName: 'asc' }] },
+  tournamentNominations: { include: { member: { select: { id: true, firstName: true, lastName: true } } } },
   children: {
     include: {
       match: {
@@ -41,6 +45,7 @@ export class TournamentsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly clubs: ClubsService,
+    private readonly push: PushService,
   ) {}
 
   private async load(id: string, user: AuthUser) {
@@ -99,7 +104,91 @@ export class TournamentsService {
         sortOrder: p.sortOrder,
       })),
       matches,
+      nominations: t.tournamentNominations
+        .map((n) => n.member)
+        .sort(byName)
+        .map((m) => ({ memberId: m.id, firstName: m.firstName, lastName: m.lastName })),
     };
+  }
+
+  /** Aktívni hráči družstva turnaja v aktívnej sezóne; nominovaní najprv. */
+  async candidates(id: string, user: AuthUser) {
+    const t = await this.loadForManage(id, user);
+    if (!t.teamId) return [];
+    const members = await this.prisma.member.findMany({
+      where: {
+        status: 'ACTIVE',
+        isDemo: t.isDemo,
+        memberships: { some: { teamId: t.teamId, leftAt: null, season: { isActive: true } } },
+      },
+      select: { id: true, firstName: true, lastName: true },
+    });
+    const nominated = new Set(t.tournamentNominations.map((n) => n.memberId));
+    const rows = members.sort(byName).map((m) => ({ ...m, nominated: nominated.has(m.id) }));
+    return [...rows.filter((r) => r.nominated), ...rows.filter((r) => !r.nominated)];
+  }
+
+  /** Pridá hráča do nominácie turnaja a prenesie ho do zápasov PLANNED/LIVE (jeden push). */
+  async nominate(id: string, memberId: string, user: AuthUser) {
+    const t = await this.loadForManage(id, user);
+    const member = await this.prisma.member.findUnique({
+      where: { id: memberId },
+      include: {
+        guardians: { select: { userId: true } },
+        memberships: { where: { teamId: t.teamId ?? '', leftAt: null, season: { isActive: true } }, select: { id: true } },
+      },
+    });
+    if (!member || member.isDemo !== t.isDemo) throw new NotFoundException('Hráč neexistuje');
+    if (member.status !== 'ACTIVE' || !t.teamId || member.memberships.length === 0) {
+      throw new BadRequestException('Hráč musí byť aktívny člen družstva turnaja v aktívnej sezóne');
+    }
+    await this.prisma.tournamentNomination.upsert({
+      where: { eventId_memberId: { eventId: t.id, memberId } },
+      create: { eventId: t.id, memberId },
+      update: {},
+    });
+    let matchesUpdated = 0;
+    for (const c of t.children) {
+      if (!c.match || !['PLANNED', 'LIVE'].includes(c.match.state)) continue;
+      await this.upsertMatchNomination(c.match.id, memberId);
+      matchesUpdated++;
+    }
+    const recipients = member.guardians.map((g) => g.userId);
+    if (member.userId) recipients.push(member.userId);
+    void this.push
+      .notifyUsers(recipients, {
+        title: 'Nominácia na turnaj',
+        body: `Nominácia na turnaj: ${t.title}, ${formatEventDateTimeSk(t.startAt)}`,
+        data: { type: 'nomination', eventId: t.id },
+      })
+      .catch(() => undefined);
+    return { memberId, matchesUpdated };
+  }
+
+  /** Obnoví REMOVED / vytvorí; už nominovanému nemení číslo dresu ani základnú zostavu. */
+  private async upsertMatchNomination(matchId: string, memberId: string) {
+    await this.prisma.matchNomination.upsert({
+      where: { matchId_memberId: { matchId, memberId } },
+      create: { matchId, memberId, status: 'NOMINATED' },
+      update: {},
+    });
+    await this.prisma.matchNomination.updateMany({ where: { matchId, memberId, status: 'REMOVED' }, data: { status: 'NOMINATED' } });
+  }
+
+  /** Odoberie hráča z nominácie turnaja; v zápasoch PLANNED/LIVE nastaví REMOVED (história ostáva). */
+  async removeNomination(id: string, memberId: string, user: AuthUser) {
+    const t = await this.loadForManage(id, user);
+    await this.prisma.tournamentNomination.deleteMany({ where: { eventId: t.id, memberId } });
+    const matchIds = t.children.filter((c) => c.match && ['PLANNED', 'LIVE'].includes(c.match.state)).map((c) => c.match!.id);
+    let matchesUpdated = 0;
+    if (matchIds.length) {
+      const r = await this.prisma.matchNomination.updateMany({
+        where: { memberId, matchId: { in: matchIds }, status: { not: 'REMOVED' } },
+        data: { status: 'REMOVED' },
+      });
+      matchesUpdated = r.count;
+    }
+    return { memberId, matchesUpdated };
   }
 
   /** Nahradí zoznam účastníkov; účastníka, ktorý už má zápas, nemožno odstrániť. */
@@ -183,6 +272,7 @@ export class TournamentsService {
       },
       include: { match: { select: { id: true } } },
     });
+    for (const n of t.tournamentNominations) await this.upsertMatchNomination(event.match!.id, n.memberId);
     return { eventId: event.id, matchId: event.match!.id, order };
   }
 

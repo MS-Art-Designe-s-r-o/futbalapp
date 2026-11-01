@@ -146,6 +146,7 @@ model Member {
   paymentObligations PaymentObligation[]
   attendances        Attendance[]
   nominations        MatchNomination[]
+  tournamentNominations TournamentNomination[]
   nominationRequests NominationRequest[]
   matchEvents        MatchEvent[]        @relation("MatchEventMember")
   relatedMatchEvents MatchEvent[]        @relation("MatchEventRelatedMember")
@@ -626,6 +627,7 @@ model Event {
   parent        Event?     @relation("TournamentMatches", fields: [parentEventId], references: [id], onDelete: Cascade)
   /// Zápasy turnaja (len pri type TOURNAMENT)
   children      Event[]    @relation("TournamentMatches")
+  tournamentNominations TournamentNomination[]
   /// Účastníci (súperi) turnaja (len pri type TOURNAMENT)
   tournamentParticipants TournamentParticipant[]
 
@@ -835,6 +837,20 @@ model MatchNomination {
   member Member @relation(fields: [memberId], references: [id], onDelete: Cascade)
 
   @@unique([matchId, memberId])
+}
+
+/// Nominácia hráča na celý turnaj; prenáša sa do MatchNomination zápasov turnaja.
+model TournamentNomination {
+  id        String   @id @default(cuid())
+  eventId   String
+  memberId  String
+  createdAt DateTime @default(now())
+
+  event  Event  @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  member Member @relation(fields: [memberId], references: [id], onDelete: Cascade)
+
+  @@unique([eventId, memberId])
+  @@index([eventId])
 }
 
 model MatchEvent {
