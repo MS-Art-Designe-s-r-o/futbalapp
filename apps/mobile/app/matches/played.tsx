@@ -21,12 +21,19 @@ interface PlayedMatch {
   id: string;
   opponent: string;
   isHome: boolean;
+  isFriendly?: boolean;
   scoreUs: number | null;
   scoreThem: number | null;
   jerseyColor: 'DARK' | 'LIGHT' | null;
   videoUrl: string | null;
   highlightsUrl: string | null;
-  event: { title: string; startAt: string; team: { name: string } | null };
+  event: {
+    title: string;
+    startAt: string;
+    tournamentOrder?: number | null;
+    parent?: { id: string; title: string } | null;
+    team: { name: string } | null;
+  };
   photos: Array<{ id: string }>;
 }
 
@@ -89,7 +96,11 @@ export default function PlayedMatchesScreen() {
           return (
             <View style={styles.card}>
               <View style={styles.headerRow}>
-                <Text style={styles.date}>{formatEventDateSk(item.event.startAt)}</Text>
+                <Text style={styles.date}>
+                  {formatEventDateSk(item.event.startAt)}
+                  {item.isFriendly ? ' · Priateľský' : ''}
+                  {item.event.parent ? ` · ${item.event.parent.title}${item.event.tournamentOrder ? ` ${item.event.tournamentOrder}. zápas` : ''}` : ''}
+                </Text>
                 {item.jerseyColor && <JerseySwatch color={item.jerseyColor} size={13} />}
               </View>
               <Text style={styles.teams}>

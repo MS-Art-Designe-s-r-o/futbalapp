@@ -34,6 +34,7 @@ export default function NewEventScreen() {
   const [date, setDate] = useState('');
   const [opponent, setOpponent] = useState('');
   const [isHome, setIsHome] = useState(true);
+  const [friendly, setFriendly] = useState(false);
   const [jerseyColor, setJerseyColor] = useState<'' | 'DARK' | 'LIGHT'>('');
   const [busy, setBusy] = useState(false);
   const [pitches, setPitches] = useState<Pitch[]>([]);
@@ -122,6 +123,7 @@ export default function NewEventScreen() {
             ...(isHome ? place : { location: location || undefined, surface: surface || undefined }),
             opponent,
             isHome,
+            friendly: friendly || undefined,
             jerseyColor: jerseyColor || undefined,
           }),
         });
@@ -220,6 +222,11 @@ export default function NewEventScreen() {
             </Pressable>
             <Pressable style={chip(!isHome)} onPress={() => setIsHome(false)}>
               <Text style={chipTxt(!isHome)}>Vonku</Text>
+            </Pressable>
+          </View>
+          <View style={styles.row}>
+            <Pressable style={chip(friendly)} onPress={() => setFriendly(!friendly)}>
+              <Text style={chipTxt(friendly)}>Priateľský zápas</Text>
             </Pressable>
           </View>
           <Text style={styles.label}>Súper</Text>

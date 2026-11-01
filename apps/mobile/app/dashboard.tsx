@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState, type ReactNode } from 'react';
-import { Alert, FlatList, Image, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Alert, FlatList, Image, Linking, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { eventTypeColor, formatEventDateSk, formatEventDateTimeSk, formatEventTimeSk } from '@fkknv/shared';
@@ -17,6 +17,10 @@ interface EventItem {
   title: string;
   startAt: string;
   location: string | null;
+  address?: string | null;
+  parentEventId?: string | null;
+  tournamentOrder?: number | null;
+  parent?: { id: string; title: string } | null;
   team: { id: string; name: string } | null;
   audienceTeams?: Array<{ id: string; name: string }>;
   match: {
@@ -24,6 +28,7 @@ interface EventItem {
     opponent: string;
     isHome: boolean;
     opponentLogo: string | null;
+    isFriendly?: boolean;
     meetAt: string | null;
     jerseyColor: 'DARK' | 'LIGHT' | null;
   } | null;
@@ -119,11 +124,13 @@ export default function DashboardScreen() {
   // detail tréningu (dochádzku) otvorí len vedenie a tréner daného družstva
   function canOpen(item: EventItem): boolean {
     if (item.match) return true;
+    if (item.type === 'TOURNAMENT') return true;
     if (item.type === 'TRAINING') return canManageTeam(me, item.team?.id);
     return false;
   }
   function openEvent(item: EventItem) {
     if (item.match) router.push(`/match/${item.match.id}`);
+    else if (item.type === 'TOURNAMENT') router.push(`/tournament/${item.id}`);
     else if (item.type === 'TRAINING' && canManageTeam(me, item.team?.id)) router.push(`/event/${item.id}/attendance`);
   }
 
@@ -167,12 +174,27 @@ export default function DashboardScreen() {
             {typeLabels[item.type] ?? item.type}
             {item.team ? ` · ${item.team.name}` : ''}
           </Text>
+          {item.match?.isFriendly && <Text style={styles.nomBadge}>Priateľský</Text>}
           {isNominated && <Text style={styles.nomBadge}>Nominovaný</Text>}
         </View>
         <Text style={styles.cardMeta}>
           {formatEventDateTimeSk(item.startAt)}
-          {item.location ? ` · ${item.location}` : ''}
+          {item.location ? ' · ' : ''}
+          {item.location ? (
+            item.address ? (
+              <Text style={{ textDecorationLine: 'underline' }} onPress={() => openMap(item.address!)}>
+                {item.location} 📍
+              </Text>
+            ) : (
+              item.location
+            )
+          ) : null}
         </Text>
+        {item.parent && item.tournamentOrder ? (
+          <Text style={styles.cardMeta}>
+            Turnaj: {item.parent.title} · {item.tournamentOrder}. zápas
+          </Text>
+        ) : null}
         {item.match ? <MatchTeams item={item} /> : <Text style={styles.cardTitle}>{item.title}</Text>}
         {item.match && (
           <View style={styles.meetRow}>
@@ -185,7 +207,7 @@ export default function DashboardScreen() {
         {audience && <Text style={styles.audience}>Pre: {audience}</Text>}
         {openable && (
           <Text style={styles.cardAction}>
-            {item.match ? 'Otvoriť zápas →' : 'Dochádzka →'}
+            {item.match ? 'Otvoriť zápas →' : item.type === 'TOURNAMENT' ? 'Otvoriť turnaj →' : 'Dochádzka →'}
           </Text>
         )}
       </Pressable>
@@ -459,6 +481,10 @@ function MonthPane({
       </View>
     </ScrollView>
   );
+}
+
+function openMap(address: string) {
+  void Linking.openURL(`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(address)}`);
 }
 
 /** Zápas ako mini-tabuľka: domáci hore, hostia dole (s logami). */

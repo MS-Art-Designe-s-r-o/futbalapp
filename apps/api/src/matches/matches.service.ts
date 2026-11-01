@@ -93,6 +93,7 @@ export class MatchesService {
         id: true,
         opponent: true,
         opponentLogo: true,
+        isFriendly: true,
         isHome: true,
         scoreUs: true,
         scoreThem: true,

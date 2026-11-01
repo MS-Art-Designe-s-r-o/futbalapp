@@ -44,6 +44,7 @@ export default function RootLayout() {
         <Stack.Screen name="tasks/index" options={{ title: 'Úlohy' }} />
         <Stack.Screen name="match/[id]/index" options={{ title: 'Zápas' }} />
         <Stack.Screen name="match/[id]/nomination" options={{ title: 'Nominácia' }} />
+        <Stack.Screen name="tournament/[id]" options={{ title: 'Turnaj' }} />
         <Stack.Screen name="matches/played" options={{ title: 'Odohrané zápasy' }} />
         <Stack.Screen name="chat/index" options={{ title: 'Kanály' }} />
         <Stack.Screen name="chat/[id]" options={{ title: 'Chat' }} />

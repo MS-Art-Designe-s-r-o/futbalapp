@@ -36,6 +36,7 @@ interface MatchDetail extends MatchTimerFields {
   id: string;
   opponent: string;
   isHome: boolean;
+  isFriendly?: boolean;
   scoreUs: number | null;
   scoreThem: number | null;
   state: string;
@@ -44,7 +45,15 @@ interface MatchDetail extends MatchTimerFields {
   jerseyColor: 'DARK' | 'LIGHT' | null;
   videoUrl: string | null;
   highlightsUrl: string | null;
-  event: { title: string; startAt: string; team: { id: string; name: string } | null };
+  event: {
+    title: string;
+    startAt: string;
+    location?: string | null;
+    address?: string | null;
+    tournamentOrder?: number | null;
+    parent?: { id: string; title: string } | null;
+    team: { id: string; name: string } | null;
+  };
   nominations: Nomination[];
   events: MatchEventRow[];
   photos: Array<{ id: string; mimeType: string; size: number; createdAt: string }>;
@@ -401,6 +410,22 @@ export default function MatchLiveScreen() {
   return (
     <KeyboardScreen style={styles.container}>
       <Text style={styles.title}>{match.event.title}</Text>
+      {match.isFriendly && <Text style={{ color: ui.lime, fontWeight: '700', marginBottom: 4 }}>Priateľský zápas</Text>}
+      {match.event.parent && (
+        <Link href={`/tournament/${match.event.parent.id}`} style={{ color: ui.lime, fontWeight: '600', marginBottom: 4 }}>
+          Turnaj: {match.event.parent.title}
+          {match.event.tournamentOrder ? ` · ${match.event.tournamentOrder}. zápas` : ''} →
+        </Link>
+      )}
+      {match.event.location && match.event.address ? (
+        <Pressable
+          onPress={() =>
+            Linking.openURL(`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(match.event.address!)}`)
+          }
+        >
+          <Text style={{ color: ui.lime, textDecorationLine: 'underline', marginBottom: 4 }}>📍 {match.event.location}</Text>
+        </Pressable>
+      ) : null}
       <Text style={styles.score}>
         {(match.isHome ? match.scoreUs : match.scoreThem) ?? 0} : {(match.isHome ? match.scoreThem : match.scoreUs) ?? 0}
       </Text>
