@@ -2,13 +2,15 @@
 
 import { use, useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
-import { formatEventDateTimeSk, formatEventTimeSk } from '@fkknv/shared';
+import { formatEventDateTimeSk, formatEventTimeSk, type SurfaceCode } from '@fkknv/shared';
 import { api } from '@/lib/api';
 import { canManageTeam, useMe } from '@/lib/auth';
 import { Button, Card, ErrorText, Modal, inputCls, labelCls } from '@/components/ui';
 import { AddressLink } from '@/components/AddressLink';
 import { EventAdminActions } from '@/components/event-admin-actions';
 import { ClubPicker, type ClubOption } from '@/components/club-picker';
+import { JerseyBadges, JerseyPicker, type JerseyColor } from '@/components/jersey';
+import { PitchPicker } from '@/components/pitch-picker';
 
 interface TournamentMatch {
   eventId: string;
@@ -23,6 +25,9 @@ interface TournamentMatch {
   scoreUs: number | null;
   scoreThem: number | null;
   address?: string | null;
+  pitchId?: string | null;
+  jerseyColor?: JerseyColor | null;
+  opponentJerseyColor?: JerseyColor | null;
   nominatedCount?: number;
 }
 interface Candidate {
@@ -39,6 +44,7 @@ interface Tournament {
     endAt: string | null;
     location: string | null;
     address: string | null;
+    pitchId?: string | null;
     teamId: string | null;
     team: { id: string; name: string } | null;
   };
@@ -64,6 +70,12 @@ function dateOf(iso: string) {
 function timeOf(iso: string) {
   const d = new Date(iso);
   return `${pad(d.getUTCHours())}:${pad(d.getUTCMinutes())}`;
+}
+
+interface PitchItem {
+  id: string;
+  name: string;
+  surface: SurfaceCode;
 }
 
 function Logo({ src }: { src: string | null }) {
@@ -96,6 +108,11 @@ export default function TournamentPage({ params }: { params: Promise<{ id: strin
   const [endTime, setEndTime] = useState('');
   const [location, setLocation] = useState('');
   const [address, setAddress] = useState('');
+  const [pitchId, setPitchId] = useState('');
+  const [surface, setSurface] = useState('');
+  const [pitches, setPitches] = useState<PitchItem[]>([]);
+  const [jersey, setJersey] = useState<JerseyColor | null>(null);
+  const [oppJersey, setOppJersey] = useState<JerseyColor | null>(null);
   const [matchBusy, setMatchBusy] = useState(false);
   const [matchError, setMatchError] = useState<string | null>(null);
   const [listError, setListError] = useState<string | null>(null);
@@ -151,6 +168,9 @@ export default function TournamentPage({ params }: { params: Promise<{ id: strin
     }
   }
   useEffect(() => {
+    api<PitchItem[]>('/pitches').then(setPitches).catch(() => {});
+  }, []);
+  useEffect(() => {
     api<ClubOption[]>('/clubs').then(setClubs).catch(() => {});
   }, []);
 
@@ -161,13 +181,27 @@ export default function TournamentPage({ params }: { params: Promise<{ id: strin
     setEditing(null);
     setOpponent('');
     setOrder(String(next));
+    // predvolené hodnoty z turnaja (čas = wall-clock v UTC komponentoch, ako všade v portáli)
     setDate(base ? dateOf(base.event.startAt) : '');
-    setTime('');
-    setEndTime('');
-    setLocation('');
-    setAddress('');
+    setTime(base ? timeOf(base.event.startAt) : '');
+    setEndTime(base?.event.endAt ? timeOf(base.event.endAt) : '');
+    setPitchId(base?.event.pitchId ?? '');
+    setLocation(base?.event.location ?? '');
+    setSurface('');
+    setAddress(base?.event.address ?? '');
+    setJersey(null);
+    setOppJersey(null);
     setMatchError(null);
   }
+  // predvyplnenie formulára po načítaní turnaja (kým sa nezačne upravovať zápas)
+  const [prefilled, setPrefilled] = useState(false);
+  useEffect(() => {
+    if (t && !prefilled && !editing) {
+      setPrefilled(true);
+      resetMatchForm(nextOrder, t);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [t, prefilled]);
   useEffect(() => {
     if (t && !editing) setOrder((o) => (o === '' || Number(o) < nextOrder ? String(nextOrder) : o));
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -180,8 +214,12 @@ export default function TournamentPage({ params }: { params: Promise<{ id: strin
     setDate(dateOf(m.startAt));
     setTime(timeOf(m.startAt));
     setEndTime(m.endAt ? timeOf(m.endAt) : '');
+    setPitchId(m.pitchId ?? '');
     setLocation(m.location ?? '');
+    setSurface('');
     setAddress(m.address ?? '');
+    setJersey(m.jerseyColor ?? null);
+    setOppJersey(m.opponentJerseyColor ?? null);
     setMatchError(null);
   }
 
@@ -207,8 +245,14 @@ export default function TournamentPage({ params }: { params: Promise<{ id: strin
       const body: Record<string, unknown> = { opponent, order: Number(order) || undefined };
       if (date && time) body.startAt = `${date}T${time}:00.000Z`;
       if (date && endTime) body.endAt = `${date}T${endTime}:00.000Z`;
-      if (location.trim()) body.location = location.trim();
+      if (pitchId) body.pitchId = pitchId;
+      else {
+        if (location.trim()) body.location = location.trim();
+        if (surface) body.surface = surface;
+      }
       if (address.trim()) body.address = address.trim();
+      body.jerseyColor = jersey;
+      body.opponentJerseyColor = oppJersey;
       if (editing) {
         await api(`/tournaments/${id}/matches/${editing.eventId}`, { method: 'PATCH', body: JSON.stringify(body) });
       } else {
@@ -420,6 +464,11 @@ export default function TournamentPage({ params }: { params: Promise<{ id: strin
                       {hasScore ? ` · ${m.scoreUs}:${m.scoreThem}` : ''}
                       {m.nominatedCount !== undefined ? ` · nominovaných: ${m.nominatedCount}` : ''}
                     </div>
+                    {(m.jerseyColor || m.opponentJerseyColor) && (
+                      <div className="mt-1 flex flex-wrap items-center gap-1.5">
+                        <JerseyBadges ours={m.jerseyColor} theirs={m.opponentJerseyColor} />
+                      </div>
+                    )}
                   </div>
                   <div className="flex flex-wrap items-center gap-2">
                     <Link href={`/portal/zapasy/${m.matchId}`} className="text-sm font-medium text-club-700 hover:underline">
@@ -481,15 +530,20 @@ export default function TournamentPage({ params }: { params: Promise<{ id: strin
                   <input type="time" value={endTime} onChange={(e) => setEndTime(e.target.value)} className={inputCls} />
                 </div>
               </div>
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className={labelCls}>Miesto</label>
-                  <input value={location} onChange={(e) => setLocation(e.target.value)} className={inputCls} />
-                </div>
-                <div>
-                  <label className={labelCls}>Adresa</label>
-                  <input value={address} onChange={(e) => setAddress(e.target.value)} maxLength={300} className={inputCls} />
-                </div>
+              <PitchPicker
+                pitches={pitches}
+                pitchId={pitchId}
+                onPitch={setPitchId}
+                location={location}
+                onLocation={setLocation}
+                surface={surface}
+                onSurface={setSurface}
+                address={address}
+                onAddress={setAddress}
+              />
+              <div className="grid gap-3 sm:grid-cols-2">
+                <JerseyPicker label="Náš dres" value={jersey} onChange={setJersey} />
+                <JerseyPicker label="Dres súpera" value={oppJersey} onChange={setOppJersey} />
               </div>
               <ErrorText>{matchError}</ErrorText>
               <div className="flex justify-end gap-2">

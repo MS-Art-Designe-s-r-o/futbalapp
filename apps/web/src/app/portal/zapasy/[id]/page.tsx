@@ -15,6 +15,7 @@ import {
   type MatchTimerPhase,
   type SurfaceCode,
 } from '@fkknv/shared';
+import { JerseyBadges, JerseyPicker } from '@/components/jersey';
 import { api } from '@/lib/api';
 import { coachTeams, isStaff, useMe } from '@/lib/auth';
 import { Button, Card } from '@/components/ui';
@@ -51,6 +52,7 @@ interface MatchDetail {
   meetAt: string | null;
   notes: string | null;
   jerseyColor: 'DARK' | 'LIGHT' | null;
+  opponentJerseyColor?: 'DARK' | 'LIGHT' | null;
   isFriendly?: boolean;
   videoUrl: string | null;
   highlightsUrl: string | null;
@@ -88,23 +90,6 @@ interface MatchDetail {
 
 // logo nášho klubu (FK Košická Nová Ves) z futbalnetu
 const OUR_LOGO = 'https://api.sportnet.online/data/ppo/fk-kosicka-nova-ves.futbalnet.sk/logo';
-
-/** Ikonka dresu — tmavý (tmavomodrý) alebo svetlý (biely). */
-function JerseyIcon({ color, size = 18 }: { color: 'DARK' | 'LIGHT'; size?: number }) {
-  const fill = color === 'DARK' ? '#16223c' : '#ffffff';
-  const stroke = color === 'DARK' ? '#16223c' : '#9ca3af';
-  return (
-    <svg viewBox="0 0 24 24" width={size} height={size} role="img" aria-hidden>
-      <path
-        d="M8.5 3 4 5.5 5.5 9l1.7-.8V20a1 1 0 0 0 1 1h7.6a1 1 0 0 0 1-1V8.2L18.5 9 20 5.5 15.5 3a3.5 3.5 0 0 1-7 0Z"
-        fill={fill}
-        stroke={stroke}
-        strokeWidth="1.2"
-        strokeLinejoin="round"
-      />
-    </svg>
-  );
-}
 
 // akcie viazané na hráča vs tímové
 const PLAYER_ACTIONS: MatchEventType[] = ['GOAL', 'ASSIST', 'PENALTY_SCORED', 'PENALTY_MISSED', 'YELLOW', 'RED', 'FOUL', 'SHOT'];
@@ -372,10 +357,10 @@ export default function MatchPage({ params }: { params: Promise<{ id: string }> 
     }
   }
 
-  async function setJersey(color: 'DARK' | 'LIGHT' | null) {
+  async function setJersey(field: 'jerseyColor' | 'opponentJerseyColor', color: 'DARK' | 'LIGHT' | null) {
     setError(null);
     try {
-      await api(`/matches/${id}/details`, { method: 'POST', body: JSON.stringify({ jerseyColor: color }) });
+      await api(`/matches/${id}/details`, { method: 'POST', body: JSON.stringify({ [field]: color }) });
       await load();
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Uloženie zlyhalo');
@@ -726,29 +711,8 @@ export default function MatchPage({ params }: { params: Promise<{ id: string }> 
                 />
                 <p className="mt-1 text-xs text-gray-400">Pre časomieru, predvolene 45.</p>
               </div>
-              <div>
-                <label className="block text-xs text-gray-500">Dres</label>
-                <div className="mt-1 flex gap-2">
-                  {([
-                    { val: 'DARK', label: 'Tmavý' },
-                    { val: 'LIGHT', label: 'Svetlý' },
-                  ] as const).map((o) => (
-                    <button
-                      key={o.val}
-                      type="button"
-                      onClick={() => setJersey(match.jerseyColor === o.val ? null : o.val)}
-                      className={`flex items-center gap-1.5 rounded-md border px-2.5 py-1.5 text-sm ${
-                        match.jerseyColor === o.val
-                          ? 'border-club-600 bg-club-50 font-medium text-club-900'
-                          : 'border-gray-300 text-gray-600'
-                      }`}
-                    >
-                      <JerseyIcon color={o.val} size={16} />
-                      {o.label}
-                    </button>
-                  ))}
-                </div>
-              </div>
+              <JerseyPicker label="Náš dres" compact value={match.jerseyColor} onChange={(c) => setJersey('jerseyColor', c)} />
+              <JerseyPicker label="Dres súpera" compact value={match.opponentJerseyColor ?? null} onChange={(c) => setJersey('opponentJerseyColor', c)} />
             </div>
             <div>
               <label className="block text-xs text-gray-500">Poznámky k zápasu</label>
@@ -776,11 +740,9 @@ export default function MatchPage({ params }: { params: Promise<{ id: string }> 
               <span className="text-gray-500">Dĺžka polčasu: </span>
               {match.halfLengthMin ?? DEFAULT_HALF_LENGTH_MIN} min
             </p>
-            {match.jerseyColor ? (
-              <p className="flex items-center gap-1.5">
-                <span className="text-gray-500">Dres: </span>
-                <JerseyIcon color={match.jerseyColor} size={16} />
-                <span>{match.jerseyColor === 'DARK' ? 'tmavý' : 'svetlý'}</span>
+            {match.jerseyColor || match.opponentJerseyColor ? (
+              <p className="flex flex-wrap items-center gap-2">
+                <JerseyBadges ours={match.jerseyColor} theirs={match.opponentJerseyColor} size={16} />
               </p>
             ) : null}
             {match.notes ? (

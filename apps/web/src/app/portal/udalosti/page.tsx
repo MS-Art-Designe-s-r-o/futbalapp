@@ -17,6 +17,8 @@ import { api, ApiError } from '@/lib/api';
 import { canManage, canManageTeam, coachTeams, isStaff, useMe, type Me } from '@/lib/auth';
 import { Button, Card, ErrorText, Modal, inputCls, labelCls } from '@/components/ui';
 import { ClubPicker } from '@/components/club-picker';
+import { JerseyBadges, JerseyIcon, JerseyPicker, type JerseyColor } from '@/components/jersey';
+import { AddressField, PitchPicker } from '@/components/pitch-picker';
 
 interface Team {
   id: string;
@@ -64,6 +66,7 @@ interface EventItem {
     meetAt: string | null;
     notes: string | null;
     jerseyColor: 'DARK' | 'LIGHT' | null;
+    opponentJerseyColor?: 'DARK' | 'LIGHT' | null;
   } | null;
 }
 
@@ -116,24 +119,6 @@ function audienceLabel(e: EventItem): string | null {
   if (e.type !== 'PARENT_MEETING') return null;
   if (e.audienceTeams && e.audienceTeams.length > 0) return e.audienceTeams.map((t) => compactTeam(t.name)).join(', ');
   return 'celý klub';
-}
-
-/** Ikonka dresu — tmavý (tmavomodrý) alebo svetlý (biely). */
-function JerseyIcon({ color, size = 18, title }: { color: 'DARK' | 'LIGHT'; size?: number; title?: string }) {
-  const fill = color === 'DARK' ? '#16223c' : '#ffffff';
-  const stroke = color === 'DARK' ? '#16223c' : '#9ca3af';
-  return (
-    <svg viewBox="0 0 24 24" width={size} height={size} aria-label={title} role="img">
-      {title ? <title>{title}</title> : null}
-      <path
-        d="M8.5 3 4 5.5 5.5 9l1.7-.8V20a1 1 0 0 0 1 1h7.6a1 1 0 0 0 1-1V8.2L18.5 9 20 5.5 15.5 3a3.5 3.5 0 0 1-7 0Z"
-        fill={fill}
-        stroke={stroke}
-        strokeWidth="1.2"
-        strokeLinejoin="round"
-      />
-    </svg>
-  );
 }
 
 /** Čas zrazu zápasu: explicitný meetAt, inak hodina pred začiatkom. */
@@ -519,13 +504,7 @@ function EventList({
                 {e.match ? <MatchTeams e={e} /> : <div className="mt-1 font-medium">{e.title}</div>}
                 {e.match && (
                   <div className="mt-1 flex items-center gap-1.5 text-xs text-gray-500">
-                    {e.match.jerseyColor && (
-                      <JerseyIcon
-                        color={e.match.jerseyColor}
-                        size={14}
-                        title={e.match.jerseyColor === 'DARK' ? 'Tmavý dres' : 'Svetlý dres'}
-                      />
-                    )}
+                    <JerseyBadges ours={e.match.jerseyColor} theirs={e.match.opponentJerseyColor} />
                     <span>
                       Zraz: {formatEventTimeSk(matchMeetTime(e)!)}
                       {e.match.notes ? ` · ${e.match.notes}` : ''}
@@ -681,12 +660,23 @@ function MonthView({
                             : `${e.team ? `${compactTeam(e.team.name)} ` : ''}${typeLabels[e.type] ?? e.type}`
                         }${e.match?.isFriendly ? ' (prát.)' : ''}${isNominated ? ' ✓' : ''}`;
                         const jersey =
-                          e.match?.jerseyColor ? (
-                            <JerseyIcon
-                              color={e.match.jerseyColor}
-                              size={11}
-                              title={e.match.jerseyColor === 'DARK' ? 'Tmavý dres' : 'Svetlý dres'}
-                            />
+                          e.match?.jerseyColor || e.match?.opponentJerseyColor ? (
+                            <span className="flex shrink-0 items-center gap-0.5">
+                              {e.match.jerseyColor && (
+                                <JerseyIcon
+                                  color={e.match.jerseyColor}
+                                  size={11}
+                                  title={`Náš dres: ${e.match.jerseyColor === 'DARK' ? 'tmavý' : 'svetlý'}`}
+                                />
+                              )}
+                              {e.match.opponentJerseyColor && (
+                                <JerseyIcon
+                                  color={e.match.opponentJerseyColor}
+                                  size={11}
+                                  title={`Dres súpera: ${e.match.opponentJerseyColor === 'DARK' ? 'tmavý' : 'svetlý'}`}
+                                />
+                              )}
+                            </span>
                           ) : null;
                         return href ? (
                           <Link
@@ -723,77 +713,6 @@ function MonthView({
           ))}
         </div>
       </div>
-    </div>
-  );
-}
-
-/** Výber hracej plochy zo zoznamu z nastavení, alebo „Iné" = miesto a povrch textom. */
-function PitchPicker({
-  pitches,
-  pitchId,
-  onPitch,
-  location,
-  onLocation,
-  surface,
-  onSurface,
-  address,
-  onAddress,
-}: {
-  pitches: Pitch[];
-  pitchId: string;
-  onPitch: (id: string) => void;
-  location: string;
-  onLocation: (v: string) => void;
-  surface: string;
-  onSurface: (v: string) => void;
-  address: string;
-  onAddress: (v: string) => void;
-}) {
-  const other = !pitchId;
-  return (
-    <>
-      {pitches.length > 0 && (
-        <div>
-          <label className={labelCls}>Hracia plocha</label>
-          <select value={pitchId} onChange={(e) => onPitch(e.target.value)} className={inputCls}>
-            {pitches.map((p) => (
-              <option key={p.id} value={p.id}>
-                {p.name} — {SURFACE_LABELS_SK[p.surface]}
-              </option>
-            ))}
-            <option value="">Iné (napísať)…</option>
-          </select>
-        </div>
-      )}
-      {other && (
-        <>
-          <div>
-            <label className={labelCls}>Miesto</label>
-            <input value={location} onChange={(e) => onLocation(e.target.value)} className={inputCls} placeholder="Ihrisko KNV" list="venue-list" />
-          </div>
-          <div>
-            <label className={labelCls}>Povrch</label>
-            <select value={surface} onChange={(e) => onSurface(e.target.value)} className={inputCls}>
-              <option value="">—</option>
-              {SURFACE_CODES.map((s) => (
-                <option key={s} value={s}>
-                  {s} — {SURFACE_LABELS_SK[s]}
-                </option>
-              ))}
-            </select>
-          </div>
-        </>
-      )}
-      <AddressField value={address} onChange={onAddress} />
-    </>
-  );
-}
-
-function AddressField({ value, onChange }: { value: string; onChange: (v: string) => void }) {
-  return (
-    <div>
-      <label className={labelCls}>Adresa (pre mapu)</label>
-      <input value={value} onChange={(e) => onChange(e.target.value)} maxLength={300} className={inputCls} placeholder="Agátová 1, 040 14 Košice" />
     </div>
   );
 }
@@ -1110,7 +1029,8 @@ function MatchModal({
   const [clubs, setClubs] = useState<ClubItem[]>([]);
   const [participants, setParticipants] = useState<string[]>([]);
   const [isHome, setIsHome] = useState(true);
-  const [jerseyColor, setJerseyColor] = useState<'' | 'DARK' | 'LIGHT'>('');
+  const [jerseyColor, setJerseyColor] = useState<JerseyColor | null>(null);
+  const [oppJersey, setOppJersey] = useState<JerseyColor | null>(null);
   const [date, setDate] = useState('');
   const [time, setTime] = useState('10:00');
   const [endTime, setEndTime] = useState('11:30');
@@ -1181,7 +1101,8 @@ function MatchModal({
           ...placeFields(isHome ? pitchId : '', location, surface),
           opponent,
           isHome,
-          jerseyColor: jerseyColor || undefined,
+          jerseyColor: jerseyColor ?? undefined,
+          opponentJerseyColor: oppJersey ?? undefined,
           address: address.trim() || undefined,
         }),
       });
@@ -1243,27 +1164,10 @@ function MatchModal({
           </div>
         )}
         {type !== 'TOURNAMENT' && (
-        <div>
-          <label className={labelCls}>Dres</label>
-          <div className="flex gap-2">
-            {([
-              { val: 'DARK', label: 'Tmavý' },
-              { val: 'LIGHT', label: 'Svetlý' },
-            ] as const).map((o) => (
-              <button
-                key={o.val}
-                type="button"
-                onClick={() => setJerseyColor(jerseyColor === o.val ? '' : o.val)}
-                className={`flex items-center gap-2 rounded-md border px-3 py-2 text-sm ${
-                  jerseyColor === o.val ? 'border-club-600 bg-club-50 font-medium text-club-900' : 'border-gray-300 text-gray-600'
-                }`}
-              >
-                <JerseyIcon color={o.val} />
-                {o.label}
-              </button>
-            ))}
+          <div className="space-y-3">
+            <JerseyPicker label="Náš dres" value={jerseyColor} onChange={setJerseyColor} />
+            <JerseyPicker label="Dres súpera" value={oppJersey} onChange={setOppJersey} />
           </div>
-        </div>
         )}
         <div className="grid grid-cols-3 gap-3">
           <div>
