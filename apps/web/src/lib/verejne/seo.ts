@@ -1,7 +1,7 @@
 import type { Metadata } from 'next';
 import { SITE_NAME } from './site';
 
-const HERO = { url: '/verejne/hero-bg-v2.jpg', width: 1679, height: 937, alt: 'Ilustračná fotografia chlapcov v dresoch FK Košická Nová Ves (AI vizualizácia)' };
+const HERO = { url: '/verejne/hero-bg-v2.jpg', width: 1679, height: 937, alt: 'Hráči FK Košická Nová Ves v klubových dresoch' };
 const LOGO = { url: '/logo.png', width: 250, height: 400, alt: 'Erb FK Košická Nová Ves' };
 
 /**

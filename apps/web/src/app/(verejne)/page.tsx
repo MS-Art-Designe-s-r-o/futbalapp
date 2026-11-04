@@ -57,7 +57,7 @@ export default async function Home() {
           </div>
         </div>
         <div className="hero-number"><strong>1935</strong><small>TRADÍCIA, KTORÁ ŽIJE.</small></div>
-        <span className="hero-caption">Ilustračná fotografia · AI vizualizácia, nejde o členov klubu</span>
+        <span className="hero-caption">Hráči FK Košická Nová Ves</span>
       </section>
 
       <div className="strip">
@@ -103,7 +103,7 @@ export default async function Home() {
           </div>
           <figure className="team-art">
             <Image src="/verejne/team-photo-v2.jpg" alt="Skupina siedmich chlapcov v klubových dresoch pózuje na štadióne" fill sizes="(max-width: 800px) 100vw, 60vw" quality={75} />
-            <figcaption>Ilustračná grafika – AI vizualizácia, nejde o členov klubu</figcaption>
+            <figcaption>Hráči FK Košická Nová Ves</figcaption>
           </figure>
         </div>
       </section>
