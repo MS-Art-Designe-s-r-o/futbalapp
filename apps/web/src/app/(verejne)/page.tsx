@@ -45,7 +45,7 @@ export default async function Home() {
     <>
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON_LD }} />
       <section className="hero">
-        <Image className="hero-bg" src="/verejne/hero-bg.jpg" alt="" fill priority sizes="100vw" quality={75} />
+        <Image className="hero-bg" src="/verejne/hero-bg-v2.jpg" alt="" fill priority sizes="100vw" quality={75} />
         <div className="hero-grid" />
         <div>
           <div className="eyebrow">KOŠICKÁ NOVÁ VES · OD ROKU 1935</div>
@@ -102,7 +102,7 @@ export default async function Home() {
             <Link href="/muzstva" className="text-link">Preskúmaj mužstvá <span>↗</span></Link>
           </div>
           <figure className="team-art">
-            <Image src="/verejne/team-photo.jpg" alt="Skupina siedmich chlapcov v klubových dresoch pózuje na štadióne" fill sizes="(max-width: 800px) 100vw, 60vw" quality={75} />
+            <Image src="/verejne/team-photo-v2.jpg" alt="Skupina siedmich chlapcov v klubových dresoch pózuje na štadióne" fill sizes="(max-width: 800px) 100vw, 60vw" quality={75} />
             <figcaption>Ilustračná grafika – AI vizualizácia, nejde o členov klubu</figcaption>
           </figure>
         </div>
