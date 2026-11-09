@@ -28,7 +28,7 @@ interface Category {
   name: string;
 }
 
-type Tab = 'debtors' | 'plans' | 'matching' | 'bank';
+type Tab = 'debtors' | 'plans' | 'matching' | 'overview' | 'bank';
 
 export default function PaymentsPage() {
   const [tab, setTab] = useState<Tab>('debtors');
@@ -41,6 +41,7 @@ export default function PaymentsPage() {
             ['debtors', 'Dlžníci'],
             ['plans', 'Predpisy'],
             ['matching', 'Párovanie platieb'],
+            ['overview', 'Prehľad platieb'],
             ['bank', 'Upomienky'],
           ] as [Tab, string][]
         ).map(([key, label]) => (
@@ -58,6 +59,7 @@ export default function PaymentsPage() {
       {tab === 'debtors' && <Debtors />}
       {tab === 'plans' && <Plans />}
       {tab === 'matching' && <PaymentMatching />}
+      {tab === 'overview' && <PaymentsOverview />}
       {tab === 'bank' && <Bank />}
     </div>
   );
@@ -885,5 +887,83 @@ function Bank() {
       </Card>
       {result && <p className="text-sm text-club-700">{result}</p>}
     </div>
+  );
+}
+
+interface OverviewRow {
+  memberId: string;
+  firstName: string;
+  lastName: string;
+  months: Record<string, { amountCents: number; paidCents: number; status: string }>;
+}
+const MONTHS = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '10', '11', '12'];
+const MONTH_NAMES = ['Jan', 'Feb', 'Mar', 'Apr', 'Máj', 'Jún', 'Júl', 'Aug', 'Sep', 'Okt', 'Nov', 'Dec'];
+
+function PaymentsOverview() {
+  const [year, setYear] = useState(new Date().getFullYear());
+  const [rows, setRows] = useState<OverviewRow[]>([]);
+  const [q, setQ] = useState('');
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    setError(null);
+    api<OverviewRow[]>(`/finance/overview?year=${year}`)
+      .then(setRows)
+      .catch((e) => setError(e instanceof Error ? e.message : 'Chyba'));
+  }, [year]);
+
+  const shown = rows.filter((r) => `${r.lastName} ${r.firstName}`.toLowerCase().includes(q.trim().toLowerCase()));
+
+  return (
+    <Card>
+      <div className="mb-3 flex flex-wrap items-center gap-3">
+        <button className="rounded border px-2 py-1 text-sm" onClick={() => setYear(year - 1)}>←</button>
+        <span className="font-semibold">{year}</span>
+        <button className="rounded border px-2 py-1 text-sm" onClick={() => setYear(year + 1)}>→</button>
+        <input className={`${inputCls} max-w-xs`} placeholder="Hľadať priezvisko / meno" value={q} onChange={(e) => setQ(e.target.value)} />
+        <span className="ml-auto flex items-center gap-3 text-xs text-gray-600">
+          <span className="flex items-center gap-1"><span className="inline-block h-3 w-3 rounded bg-green-500" /> uhradené</span>
+          <span className="flex items-center gap-1"><span className="inline-block h-3 w-3 rounded bg-red-500" /> neuhradené</span>
+        </span>
+      </div>
+      {error && <ErrorText>{error}</ErrorText>}
+      <div className="overflow-x-auto">
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="text-left text-xs text-gray-500">
+              <th className="px-2 py-2">Priezvisko a meno</th>
+              {MONTH_NAMES.map((m) => (
+                <th key={m} className="px-1 py-2 text-center">{m}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {shown.map((r) => (
+              <tr key={r.memberId} className="border-t border-club-50">
+                <td className="whitespace-nowrap px-2 py-1.5 font-medium">{r.lastName} {r.firstName}</td>
+                {MONTHS.map((m) => {
+                  const c = r.months[m];
+                  if (!c) return <td key={m} className="px-1 py-1.5 text-center text-gray-300">–</td>;
+                  const paid = c.status === 'PAID' || c.status === 'WAIVED' || c.paidCents >= c.amountCents;
+                  return (
+                    <td key={m} className="px-1 py-1.5 text-center">
+                      <span
+                        title={`${(c.paidCents / 100).toFixed(2)} / ${(c.amountCents / 100).toFixed(2)} €`}
+                        className={`inline-block min-w-[3rem] rounded px-1.5 py-0.5 text-xs font-medium text-white ${paid ? 'bg-green-500' : 'bg-red-500'}`}
+                      >
+                        {(c.amountCents / 100).toFixed(0)} €
+                      </span>
+                    </td>
+                  );
+                })}
+              </tr>
+            ))}
+            {shown.length === 0 && (
+              <tr><td colSpan={13} className="px-2 py-6 text-center text-gray-500">Žiadne platby pre rok {year}.</td></tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+    </Card>
   );
 }

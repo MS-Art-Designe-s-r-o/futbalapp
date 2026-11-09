@@ -382,6 +382,37 @@ export class FinanceService {
     return [...byMember.values()].sort((a, b) => b.owedCents - a.owedCents);
   }
 
+  /** Prehľad platieb: člen × mesiac (podľa priezviska a mena) pre daný rok. */
+  async paymentsOverview(year: number) {
+    await this.prisma.paymentObligation.updateMany({
+      where: { status: { in: ['PENDING', 'PARTIAL'] }, dueDate: { lt: new Date() } },
+      data: { status: 'OVERDUE' },
+    });
+    const rows = await this.prisma.paymentObligation.findMany({
+      where: { periodLabel: { startsWith: `${year}-` } },
+      select: {
+        id: true,
+        memberId: true,
+        periodLabel: true,
+        amountCents: true,
+        paidCents: true,
+        status: true,
+        member: { select: { firstName: true, lastName: true } },
+      },
+    });
+    const byMember = new Map<string, { memberId: string; firstName: string; lastName: string; months: Record<string, { amountCents: number; paidCents: number; status: string }> }>();
+    for (const o of rows) {
+      const e = byMember.get(o.memberId) ?? { memberId: o.memberId, firstName: o.member.firstName, lastName: o.member.lastName, months: {} };
+      const month = String(Number(o.periodLabel.slice(5, 7)));
+      const cur = e.months[month];
+      e.months[month] = cur
+        ? { amountCents: cur.amountCents + o.amountCents, paidCents: cur.paidCents + o.paidCents, status: cur.status === 'PAID' || cur.status === 'WAIVED' ? o.status : cur.status }
+        : { amountCents: o.amountCents, paidCents: o.paidCents, status: o.status };
+      byMember.set(o.memberId, e);
+    }
+    return [...byMember.values()].sort((a, b) => a.lastName.localeCompare(b.lastName, 'sk') || a.firstName.localeCompare(b.firstName, 'sk'));
+  }
+
   /** Stav platieb člena — pre rodiča aj podklad pre športový príspevok. */
   memberPayments(memberId: string, fromLabel?: string, toLabel?: string) {
     return this.prisma.paymentObligation.findMany({
