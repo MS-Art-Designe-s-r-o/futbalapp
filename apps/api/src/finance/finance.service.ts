@@ -384,8 +384,8 @@ export class FinanceService {
 
   /**
    * Prehľad platieb: člen × mesiac pre daný rok.
-   * Uhradené = súčet spárovaných bankových pohybov člena v danom mesiaci (podľa dátumu pohybu)
-   * alebo uhradená povinnosť. Predpis = povinnosť, inak aktívny predpis člena (suma × mesiac v platnosti).
+   * Uhradené = spárované bankové pohyby člena za rok rozúčtované na mesiace od januára (aj hromadná platba
+   * pokryje viac mesiacov) alebo uhradená povinnosť. Predpis = povinnosť, inak aktívny predpis člena (suma × mesiac v platnosti).
    * Mesiac po splatnosti bez úhrady = neuhradené; budúce mesiace bez platby sa nezobrazia.
    */
   async paymentsOverview(year: number) {
@@ -421,31 +421,38 @@ export class FinanceService {
     type Cell = { amountCents: number; paidCents: number; status: string };
     const rows = members.map((m) => {
       const months: Record<string, Cell> = {};
+      const myObs = obligations.filter((o) => o.memberId === m.id);
+      const myAssign = assignments.filter((a) => a.memberId === m.id);
+      // zásoba spárovaných platieb za rok, od ktorej sa odpočítajú sumy už rozúčtované na povinnosti
+      const totalTx = txs.filter((t) => t.matchedMemberId === m.id).reduce((n, t) => n + t.amountCents, 0);
+      let pool = Math.max(0, totalTx - myObs.reduce((n, o) => n + o.paidCents, 0));
       for (let mo = 1; mo <= 12; mo++) {
         const label = periodLabel(year, mo);
-        const obs = obligations.filter((o) => o.memberId === m.id && o.periodLabel === label);
-        const paidTx = txs
-          .filter((t) => t.matchedMemberId === m.id && t.date.getUTCMonth() + 1 === mo)
-          .reduce((n, t) => n + t.amountCents, 0);
-        const obsPaid = obs.reduce((n, o) => n + o.paidCents, 0);
-        const paid = Math.max(paidTx, obsPaid);
-        const planned = obs.length
-          ? obs.reduce((n, o) => n + o.amountCents, 0)
-          : assignments
-              .filter((a) => a.memberId === m.id)
-              .filter((a) => {
-                const start = a.feePlan.activeFrom;
-                const end = a.feePlan.activeTo;
-                const first = new Date(Date.UTC(year, mo - 1, 1));
-                const last = new Date(Date.UTC(year, mo, 0));
-                return start <= last && (!end || end >= first);
-              })
-              .reduce((n, a) => n + (a.overrideCents ?? a.feePlan.amountCents), 0);
-        const waived = obs.length > 0 && obs.every((o) => o.status === 'WAIVED');
+        const obs = myObs.filter((o) => o.periodLabel === label);
+        let planned: number;
+        let paid: number;
+        if (obs.length) {
+          planned = obs.reduce((n, o) => n + o.amountCents, 0);
+          paid = obs.reduce((n, o) => n + o.paidCents, 0);
+          const need = Math.max(0, planned - paid);
+          const take = Math.min(pool, need);
+          paid += take;
+          pool -= take;
+        } else {
+          const first = new Date(Date.UTC(year, mo - 1, 1));
+          const last = new Date(Date.UTC(year, mo, 0));
+          planned = myAssign
+            .filter((a) => a.feePlan.activeFrom <= last && (!a.feePlan.activeTo || a.feePlan.activeTo >= first))
+            .reduce((n, a) => n + (a.overrideCents ?? a.feePlan.amountCents), 0);
+          const take = Math.min(pool, planned);
+          paid = take;
+          pool -= take;
+        }
         if (planned === 0 && paid === 0) continue;
-        const isPaid = waived || paid > 0 && paid >= planned;
+        const waived = obs.length > 0 && obs.every((o) => o.status === 'WAIVED');
+        const isPaid = waived || (planned > 0 && paid >= planned);
         if (!isPaid && mo > curMonth) continue;
-        months[String(mo)] = { amountCents: planned || paid, paidCents: paid, status: isPaid ? 'PAID' : 'OVERDUE' };
+        months[String(mo)] = { amountCents: planned, paidCents: paid, status: isPaid ? 'PAID' : 'OVERDUE' };
       }
       return { memberId: m.id, firstName: m.firstName, lastName: m.lastName, months };
     });
