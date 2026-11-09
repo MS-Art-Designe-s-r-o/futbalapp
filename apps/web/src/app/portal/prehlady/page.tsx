@@ -11,7 +11,7 @@ interface TileDef {
 
 const TILES: TileDef[] = [
   { href: '/portal/prehlady/dochadzka', emoji: '📋', title: 'Dochádzka', desc: 'Dochádzkový list družstva za mesiac.' },
-  { href: '/portal/prehlady/previerky', emoji: '⏱️', title: 'Previerky', desc: 'Výsledky previerok výkonnosti hráčov: behy, člnkový beh, skok z miesta.' },
+  { href: '/portal/prehlady/previerky', emoji: '⏱️', title: 'Testovanie', desc: 'Výsledky testovania výkonnosti hráčov: behy, člnkový beh, skok z miesta.' },
   { href: null, emoji: '📊', title: 'Štatistiky hráča', desc: 'Pripravujeme.' },
   { href: null, emoji: '⚽', title: 'Zápasy', desc: 'Pripravujeme.' },
 ];

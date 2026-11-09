@@ -164,9 +164,9 @@ function NewTestForm() {
   return (
     <div className="space-y-5">
       <Link href="/portal/prehlady/previerky" className="text-sm text-club-600 hover:underline">
-        ← Previerky
+        ← Testovanie
       </Link>
-      <h1 className="text-2xl font-bold text-club-900">Nová previerka</h1>
+      <h1 className="text-2xl font-bold text-club-900">Nové testovanie</h1>
 
       <div className="flex flex-wrap items-end gap-3">
         <div>
@@ -194,7 +194,7 @@ function NewTestForm() {
       <div className="space-y-2">
         <CategoryTabs value={category} onChange={setCategory} />
         <div className="flex flex-wrap items-center gap-1.5">
-          <span className="text-xs text-gray-500">Disciplíny v previerke:</span>
+          <span className="text-xs text-gray-500">Disciplíny v testovaní:</span>
           {disciplinesOf(category).map((d) => {
             const on = selected.includes(d.key);
             return (
@@ -286,7 +286,7 @@ function NewTestForm() {
         </div>
       )}
       <p className="text-xs text-gray-500">
-        Čas zadávajte v sekundách (napr. 2,35), skok v cm, ostatné podľa jednotky v hlavičke. Disciplíny vyberte tlačidlami nad tabuľkou. Tlačidlom na konci riadka sa uloží previerka daného hráča.
+        Čas zadávajte v sekundách (napr. 2,35), skok v cm, ostatné podľa jednotky v hlavičke. Disciplíny vyberte tlačidlami nad tabuľkou. Tlačidlom na konci riadka sa uloží testovanie daného hráča.
       </p>
     </div>
   );

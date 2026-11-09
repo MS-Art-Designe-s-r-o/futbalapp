@@ -874,7 +874,7 @@ function MemberModal({
             tabs={[
               { key: 'info', label: 'Údaje' },
               { key: 'attendance', label: 'Dochádzka' },
-              { key: 'tests', label: 'Previerky' },
+              { key: 'tests', label: 'Testovanie' },
             ]}
             value={tab === 'info' || tab === 'attendance' || tab === 'tests' ? tab : 'info'}
             onChange={setTab}
@@ -935,7 +935,7 @@ function MemberModal({
               { key: 'info', label: 'Údaje' },
               { key: 'parents', label: 'Rodičia' },
               { key: 'attendance', label: 'Dochádzka' },
-              { key: 'tests', label: 'Previerky' },
+              { key: 'tests', label: 'Testovanie' },
             ]}
             value={tab}
             onChange={setTab}

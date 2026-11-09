@@ -50,7 +50,7 @@ export default function FitnessTestsPage() {
   }, [tests]);
 
   async function removeGroup(date: string, teamId: string | null, label: string) {
-    if (!window.confirm(`Vymazať previerku ${label}? Zmažú sa výsledky všetkých hráčov z tohto dňa.`)) return;
+    if (!window.confirm(`Vymazať testovanie ${label}? Zmažú sa výsledky všetkých hráčov z tohto dňa.`)) return;
     const key = `${date}|${teamId ?? ''}`;
     setBusyKey(key);
     setError(null);
@@ -124,7 +124,7 @@ export default function FitnessTestsPage() {
     return (
       <div className="space-y-5">
         <button onClick={() => setSel(null)} className="text-sm text-club-600 hover:underline">
-          ← Previerky
+          ← Testovanie
         </button>
         <h1 className="text-2xl font-bold text-club-900">{member ? fullName(member) : 'Hráč'}</h1>
         <CategoryTabs value={category} onChange={setCategory} />
@@ -166,10 +166,10 @@ export default function FitnessTestsPage() {
     return (
       <div className="space-y-5">
         <button onClick={() => setSel(null)} className="text-sm text-club-600 hover:underline">
-          ← Previerky
+          ← Testovanie
         </button>
         <h1 className="text-2xl font-bold text-club-900">
-          Previerka {formatDate(sel.date)}
+          Testovanie {formatDate(sel.date)}
           {rows[0]?.team ? ` — ${rows[0].team.name}` : ''}
         </h1>
         <CategoryTabs value={category} onChange={setCategory} />
@@ -213,12 +213,12 @@ export default function FitnessTestsPage() {
         ← Štatistiky
       </Link>
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <h1 className="text-2xl font-bold text-club-900">Previerky</h1>
+        <h1 className="text-2xl font-bold text-club-900">Testovanie</h1>
         <Link
           href="/portal/prehlady/previerky/nova"
           className="rounded-md bg-club-600 px-4 py-2 text-sm font-semibold text-white hover:bg-club-700"
         >
-          + Nová previerka
+          + Nové testovanie
         </Link>
       </div>
 
@@ -269,7 +269,7 @@ export default function FitnessTestsPage() {
         <Card className="text-sm text-gray-500">Načítavam…</Card>
       ) : (mode === 'players' ? players.length : dates.length) === 0 ? (
         <Card className="text-sm text-gray-500">
-          Žiadne previerky. Vytvoríte ich tlačidlom „Nová previerka“, z tréningu alebo v karte hráča.
+          Žiadne testovania. Vytvoríte ich tlačidlom „Nové testovanie“, z tréningu alebo v karte hráča.
         </Card>
       ) : (
         <div className="overflow-x-auto rounded-lg border border-club-100 bg-white">
@@ -279,7 +279,7 @@ export default function FitnessTestsPage() {
                 <tr>
                   <th className={thCls}>Hráč</th>
                   <th className={thCls}>Družstvo</th>
-                  <th className={thCls}>Posledná previerka</th>
+                  <th className={thCls}>Posledné testovanie</th>
                   <th className={thCls}>Počet previerok</th>
                 </tr>
               ) : (

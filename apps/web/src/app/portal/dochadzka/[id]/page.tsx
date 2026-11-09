@@ -109,7 +109,7 @@ export default function AttendancePage({ params }: { params: Promise<{ id: strin
                   href={`/portal/prehlady/previerky/nova?team=${event.team.id}`}
                   className="inline-block rounded-md border border-club-300 px-3 py-1.5 text-sm font-semibold text-club-700 hover:bg-club-50"
                 >
-                  ⏱️ Vytvoriť previerku
+                  ⏱️ Vytvoriť testovanie
                 </Link>
               </div>
             )}
