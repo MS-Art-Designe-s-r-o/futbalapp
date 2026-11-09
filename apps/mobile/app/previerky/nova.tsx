@@ -205,7 +205,7 @@ export default function NewFitnessTestScreen() {
           );
         })
       )}
-      <Text style={styles.hint}>Časy v sekundách (napr. 2,35), skok v cm. Tlačidlo pri hráčovi uloží jeho previerku.</Text>
+      <Text style={styles.hint}>Časy v sekundách (napr. 2,35), skok v cm. Tlačidlo pri hráčovi uloží jeho testovanie.</Text>
     </KeyboardScreen>
   );
 }

@@ -18,7 +18,7 @@ export default function StatisticsScreen() {
         <Pressable style={styles.tile} onPress={() => router.push('/previerky')}>
           <Text style={styles.emoji}>⏱️</Text>
           <View style={{ flex: 1 }}>
-            <Text style={styles.title}>Previerky</Text>
+            <Text style={styles.title}>Testovanie</Text>
             <Text style={styles.subtitle}>Behy, člnkový beh, skok z miesta — výsledky hráčov, zadanie a úprava.</Text>
           </View>
         </Pressable>

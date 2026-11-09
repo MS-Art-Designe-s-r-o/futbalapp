@@ -97,7 +97,7 @@ export default function AttendanceScreen() {
           style={styles.testBtn}
           onPress={() => router.push({ pathname: '/previerky/nova', params: { team: event.team!.id } })}
         >
-          <Text style={styles.testBtnText}>⏱️ Vytvoriť previerku</Text>
+          <Text style={styles.testBtnText}>⏱️ Vytvoriť testovanie</Text>
         </Pressable>
       )}
       <FlatList

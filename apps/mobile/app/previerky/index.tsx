@@ -120,7 +120,7 @@ export default function FitnessTestsScreen() {
   }, [tests, q, sort, teamFilter]);
 
   function confirmRemove(date: string, teamId: string | null, label: string) {
-    Alert.alert('Vymazať previerku', `Vymazať previerku ${label}? Zmažú sa výsledky všetkých hráčov z tohto dňa.`, [
+    Alert.alert('Vymazať testovanie', `Vymazať testovanie ${label}? Zmažú sa výsledky všetkých hráčov z tohto dňa.`, [
       { text: 'Zrušiť', style: 'cancel' },
       {
         text: 'Vymazať',
@@ -147,7 +147,7 @@ export default function FitnessTestsScreen() {
     return (
       <ScrollView style={styles.container} contentContainerStyle={{ padding: 16 }}>
         <Pressable onPress={() => setSel(null)}>
-          <Text style={styles.back}>← Previerky</Text>
+          <Text style={styles.back}>← Testovanie</Text>
         </Pressable>
         <Text style={styles.title}>{member ? fullName(member) : 'Hráč'}</Text>
         {[...rows].reverse().map((t) => (
@@ -169,9 +169,9 @@ export default function FitnessTestsScreen() {
     return (
       <ScrollView style={styles.container} contentContainerStyle={{ padding: 16 }}>
         <Pressable onPress={() => setSel(null)}>
-          <Text style={styles.back}>← Previerky</Text>
+          <Text style={styles.back}>← Testovanie</Text>
         </Pressable>
-        <Text style={styles.title}>Previerka {label}</Text>
+        <Text style={styles.title}>Testovanie {label}</Text>
         <View style={styles.actions}>
           {sel.teamId && (
             <Pressable
@@ -200,7 +200,7 @@ export default function FitnessTestsScreen() {
   return (
     <KeyboardScreen style={styles.container}>
       <Pressable style={styles.newBtn} onPress={() => router.push('/previerky/nova')}>
-        <Text style={styles.newBtnText}>+ Nová previerka</Text>
+        <Text style={styles.newBtnText}>+ Nové testovanie</Text>
       </Pressable>
 
       <View style={styles.chipRow}>
@@ -268,7 +268,7 @@ export default function FitnessTestsScreen() {
             );
           })}
       {(mode === 'players' ? players.length : dates.length) === 0 && !error && (
-        <Text style={styles.empty}>Žiadne previerky.</Text>
+        <Text style={styles.empty}>Žiadne testovania.</Text>
       )}
     </KeyboardScreen>
   );

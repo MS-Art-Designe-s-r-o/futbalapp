@@ -39,8 +39,8 @@ export default function RootLayout() {
         <Stack.Screen name="event/new" options={{ title: 'Nová udalosť' }} />
         <Stack.Screen name="event/[id]/attendance" options={{ title: 'Dochádzka' }} />
         <Stack.Screen name="statistics" options={{ title: 'Štatistiky' }} />
-        <Stack.Screen name="previerky/index" options={{ title: 'Previerky' }} />
-        <Stack.Screen name="previerky/nova" options={{ title: 'Nová previerka' }} />
+        <Stack.Screen name="previerky/index" options={{ title: 'Testovanie' }} />
+        <Stack.Screen name="previerky/nova" options={{ title: 'Nové testovanie' }} />
         <Stack.Screen name="tasks/index" options={{ title: 'Úlohy' }} />
         <Stack.Screen name="match/[id]/index" options={{ title: 'Zápas' }} />
         <Stack.Screen name="match/[id]/nomination" options={{ title: 'Nominácia' }} />
