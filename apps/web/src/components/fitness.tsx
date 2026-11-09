@@ -101,7 +101,7 @@ export const LEGEND = (
   <p className="text-xs text-gray-500">
     <span className="font-semibold text-green-600">Zelená</span> = zlepšenie,{' '}
     <span className="font-semibold text-red-600">červená</span> = zhoršenie, čierna = bez zmeny oproti predchádzajúcej
-    previerke (v zátvorke rozdiel).
+    testovaní (v zátvorke rozdiel).
   </p>
 );
 
@@ -171,7 +171,7 @@ export function PlayerFitnessPanel({
   }
 
   async function remove(id: string) {
-    if (!window.confirm('Zmazať túto previerku?')) return;
+    if (!window.confirm('Zmazať toto testovanie?')) return;
     try {
       await api(`/fitness-tests/${id}`, { method: 'DELETE' });
       load();
@@ -193,10 +193,10 @@ export function PlayerFitnessPanel({
   return (
     <div className="space-y-2 rounded-md border border-club-100 p-3">
       <div className="flex items-center justify-between">
-        <h3 className="text-sm font-semibold text-club-800">Previerky</h3>
+        <h3 className="text-sm font-semibold text-club-800">Testovanie</h3>
         {editing === null && (
           <Button variant="ghost" onClick={() => startEdit(null)} className="!px-2 !py-1 !text-xs">
-            + Pridať previerku
+            + Pridať testovanie
           </Button>
         )}
       </div>
@@ -254,7 +254,7 @@ export function PlayerFitnessPanel({
       {editing === null && <ErrorText>{error}</ErrorText>}
 
       {desc.length === 0 ? (
-        <p className="text-xs text-gray-500">Zatiaľ žiadne previerky.</p>
+        <p className="text-xs text-gray-500">Zatiaľ žiadne testovania.</p>
       ) : (
         <div className="space-y-2">
           {editing === null && <CategoryTabs value={category} onChange={setCategory} />}
