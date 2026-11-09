@@ -382,35 +382,76 @@ export class FinanceService {
     return [...byMember.values()].sort((a, b) => b.owedCents - a.owedCents);
   }
 
-  /** Prehľad platieb: člen × mesiac (podľa priezviska a mena) pre daný rok. */
+  /**
+   * Prehľad platieb: člen × mesiac pre daný rok.
+   * Uhradené = súčet spárovaných bankových pohybov člena v danom mesiaci (podľa dátumu pohybu)
+   * alebo uhradená povinnosť. Predpis = povinnosť, inak aktívny predpis člena (suma × mesiac v platnosti).
+   * Mesiac po splatnosti bez úhrady = neuhradené; budúce mesiace bez platby sa nezobrazia.
+   */
   async paymentsOverview(year: number) {
-    await this.prisma.paymentObligation.updateMany({
-      where: { status: { in: ['PENDING', 'PARTIAL'] }, dueDate: { lt: new Date() } },
-      data: { status: 'OVERDUE' },
+    const from = new Date(Date.UTC(year, 0, 1));
+    const to = new Date(Date.UTC(year + 1, 0, 1));
+    const [txs, obligations, assignments] = await Promise.all([
+      this.prisma.bankTransaction.findMany({
+        where: { matchedMemberId: { not: null }, date: { gte: from, lt: to }, amountCents: { gt: 0 } },
+        select: { matchedMemberId: true, date: true, amountCents: true },
+      }),
+      this.prisma.paymentObligation.findMany({
+        where: { periodLabel: { startsWith: `${year}-` } },
+        select: { memberId: true, periodLabel: true, amountCents: true, paidCents: true, status: true },
+      }),
+      this.prisma.feeAssignment.findMany({
+        where: { active: true, feePlan: { period: 'MONTHLY' } },
+        include: { feePlan: true },
+      }),
+    ]);
+
+    const memberIds = new Set<string>([
+      ...txs.map((t) => t.matchedMemberId as string),
+      ...obligations.map((o) => o.memberId),
+      ...assignments.map((a) => a.memberId),
+    ]);
+    const members = await this.prisma.member.findMany({
+      where: { id: { in: [...memberIds] } },
+      select: { id: true, firstName: true, lastName: true },
     });
-    const rows = await this.prisma.paymentObligation.findMany({
-      where: { periodLabel: { startsWith: `${year}-` } },
-      select: {
-        id: true,
-        memberId: true,
-        periodLabel: true,
-        amountCents: true,
-        paidCents: true,
-        status: true,
-        member: { select: { firstName: true, lastName: true } },
-      },
+
+    const now = new Date();
+    const curMonth = now.getUTCFullYear() === year ? now.getUTCMonth() + 1 : now.getUTCFullYear() > year ? 12 : 0;
+    type Cell = { amountCents: number; paidCents: number; status: string };
+    const rows = members.map((m) => {
+      const months: Record<string, Cell> = {};
+      for (let mo = 1; mo <= 12; mo++) {
+        const label = periodLabel(year, mo);
+        const obs = obligations.filter((o) => o.memberId === m.id && o.periodLabel === label);
+        const paidTx = txs
+          .filter((t) => t.matchedMemberId === m.id && t.date.getUTCMonth() + 1 === mo)
+          .reduce((n, t) => n + t.amountCents, 0);
+        const obsPaid = obs.reduce((n, o) => n + o.paidCents, 0);
+        const paid = Math.max(paidTx, obsPaid);
+        const planned = obs.length
+          ? obs.reduce((n, o) => n + o.amountCents, 0)
+          : assignments
+              .filter((a) => a.memberId === m.id)
+              .filter((a) => {
+                const start = a.feePlan.activeFrom;
+                const end = a.feePlan.activeTo;
+                const first = new Date(Date.UTC(year, mo - 1, 1));
+                const last = new Date(Date.UTC(year, mo, 0));
+                return start <= last && (!end || end >= first);
+              })
+              .reduce((n, a) => n + (a.overrideCents ?? a.feePlan.amountCents), 0);
+        const waived = obs.length > 0 && obs.every((o) => o.status === 'WAIVED');
+        if (planned === 0 && paid === 0) continue;
+        const isPaid = waived || paid > 0 && paid >= planned;
+        if (!isPaid && mo > curMonth) continue;
+        months[String(mo)] = { amountCents: planned || paid, paidCents: paid, status: isPaid ? 'PAID' : 'OVERDUE' };
+      }
+      return { memberId: m.id, firstName: m.firstName, lastName: m.lastName, months };
     });
-    const byMember = new Map<string, { memberId: string; firstName: string; lastName: string; months: Record<string, { amountCents: number; paidCents: number; status: string }> }>();
-    for (const o of rows) {
-      const e = byMember.get(o.memberId) ?? { memberId: o.memberId, firstName: o.member.firstName, lastName: o.member.lastName, months: {} };
-      const month = String(Number(o.periodLabel.slice(5, 7)));
-      const cur = e.months[month];
-      e.months[month] = cur
-        ? { amountCents: cur.amountCents + o.amountCents, paidCents: cur.paidCents + o.paidCents, status: cur.status === 'PAID' || cur.status === 'WAIVED' ? o.status : cur.status }
-        : { amountCents: o.amountCents, paidCents: o.paidCents, status: o.status };
-      byMember.set(o.memberId, e);
-    }
-    return [...byMember.values()].sort((a, b) => a.lastName.localeCompare(b.lastName, 'sk') || a.firstName.localeCompare(b.firstName, 'sk'));
+    return rows
+      .filter((r) => Object.keys(r.months).length > 0)
+      .sort((a, b) => a.lastName.localeCompare(b.lastName, 'sk') || a.firstName.localeCompare(b.firstName, 'sk'));
   }
 
   /** Stav platieb člena — pre rodiča aj podklad pre športový príspevok. */
