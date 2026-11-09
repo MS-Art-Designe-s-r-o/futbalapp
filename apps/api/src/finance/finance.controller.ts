@@ -72,6 +72,20 @@ export class FinanceController {
     return this.dunningService.run();
   }
 
+  /** Náhľad príjemcov ospravedlnenia za testovacie upomienky. */
+  @Get('dunning/apology')
+  @Roles('ADMIN')
+  apologyPreview() {
+    return this.dunningService.apologyRecipients();
+  }
+
+  /** Odošle rodičom, ktorým prišla upomienka, oznam že išlo o testovaciu správu. */
+  @Post('dunning/apology')
+  @Roles('ADMIN')
+  sendApology() {
+    return this.dunningService.sendApology();
+  }
+
   @Get('fee-plans')
   @Roles('ADMIN', 'MANAGER')
   listFeePlans() {

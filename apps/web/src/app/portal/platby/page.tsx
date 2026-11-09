@@ -864,8 +864,40 @@ function Bank() {
     }
   }
 
+  async function sendApology() {
+    setBusy(true);
+    try {
+      const p = await api<{ members: string[]; userIds: string[]; emails: string[] }>('/finance/dunning/apology');
+      if (p.userIds.length === 0) {
+        setResult('Žiadnemu rodičovi zatiaľ neodišla upomienka.');
+        return;
+      }
+      const ok = window.confirm(
+        `Odoslať oznam „upomienky boli len testovacie“ ${p.userIds.length} rodičom (${p.emails.length} e-mailov) ` +
+          `za ${p.members.length} hráčov?\n\n${p.members.slice(0, 15).join(', ')}${p.members.length > 15 ? ', …' : ''}`,
+      );
+      if (!ok) return;
+      const r = await api<{ members: number; recipients: number; emailsSent: number }>('/finance/dunning/apology', { method: 'POST' });
+      setResult(`Oznam odoslaný: ${r.recipients} rodičov (push), ${r.emailsSent} e-mailov, ${r.members} hráčov.`);
+    } catch (e) {
+      setResult(e instanceof Error ? e.message : 'Chyba');
+    } finally {
+      setBusy(false);
+    }
+  }
+
   return (
     <div className="space-y-4">
+      <Card className="space-y-3">
+        <h2 className="font-semibold text-club-800">Oznam: upomienky boli testovacie</h2>
+        <p className="text-sm text-gray-600">
+          Pošle všetkým rodičom, ktorým kedykoľvek odišla upomienka (oprávnená aj neoprávnená), push aj e-mail, že
+          správa bola len testovacia a nemá nič spoločné s úhradami. Pred odoslaním sa zobrazí zoznam a potvrdenie.
+        </p>
+        <Button variant="ghost" onClick={sendApology} disabled={busy}>
+          Poslať oznam rodičom
+        </Button>
+      </Card>
       <Card className="space-y-3">
         <h2 className="font-semibold text-club-800">Prepárovať pohyby</h2>
         <p className="text-sm text-gray-600">

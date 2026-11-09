@@ -129,4 +129,51 @@ export class DunningService {
 
     return { overdueObligations: overdue.length, membersNotified: notified };
   }
+
+  /** Príjemcovia ospravedlnenia: rodičia (a členovia s účtom), ktorým kedykoľvek odišla upomienka. */
+  async apologyRecipients() {
+    const members = await this.prisma.member.findMany({
+      where: { paymentObligations: { some: { dunning: { some: {} } } } },
+      select: {
+        firstName: true,
+        lastName: true,
+        userId: true,
+        guardians: { select: { userId: true, user: { select: { email: true } } } },
+      },
+    });
+    const userIds = new Set<string>();
+    const emails = new Set<string>();
+    for (const m of members) {
+      if (m.userId) userIds.add(m.userId);
+      for (const g of m.guardians) {
+        userIds.add(g.userId);
+        if (g.user.email) emails.add(g.user.email);
+      }
+    }
+    return {
+      members: members.map((m) => `${m.lastName} ${m.firstName}`).sort((a, b) => a.localeCompare(b, 'sk')),
+      userIds: [...userIds],
+      emails: [...emails],
+    };
+  }
+
+  /** Jednorazové ospravedlnenie: upomienky boli len testovacie. Posiela push + e-mail. */
+  async sendApology() {
+    const r = await this.apologyRecipients();
+    await this.pushService.notifyUsers(r.userIds, {
+      title: 'Oznam: testovacia správa',
+      body: 'Predchádzajúca správa o platbe bola len testovacia a nemá nič spoločné s úhradami. Ďakujeme za pochopenie.',
+      data: { type: 'info' },
+    });
+    const email = await this.emailService.send(
+      r.emails,
+      'Oznam: predchádzajúca správa o platbe bola testovacia',
+      `<p>Dobrý deň,</p>
+       <p>správa o platbe členského, ktorú ste dostali, bola <strong>len testovacia</strong>
+       a nemá nič spoločné s úhradami. Prosíme, nezohľadňujte ju.</p>
+       <p>Ďakujeme za pochopenie.</p>
+       <p>FK Košická Nová Ves</p>`,
+    );
+    return { members: r.members.length, recipients: r.userIds.length, emailsSent: email.sent ? r.emails.length : 0 };
+  }
 }
