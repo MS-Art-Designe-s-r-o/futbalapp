@@ -424,7 +424,12 @@ export class FinanceService {
       const myObs = obligations.filter((o) => o.memberId === m.id);
       const myAssign = assignments.filter((a) => a.memberId === m.id);
       // zásoba spárovaných platieb za rok, od ktorej sa odpočítajú sumy už rozúčtované na povinnosti
-      const totalTx = txs.filter((t) => t.matchedMemberId === m.id).reduce((n, t) => n + t.amountCents, 0);
+      // platby pred začiatkom predpisu (napr. predošlá sezóna) sa do zásoby nepočítajú
+      const starts = myAssign.map((a) => a.feePlan.activeFrom.getTime());
+      const fromTs = starts.length ? Math.min(...starts) : 0;
+      const totalTx = txs
+        .filter((t) => t.matchedMemberId === m.id && t.date.getTime() >= fromTs)
+        .reduce((n, t) => n + t.amountCents, 0);
       let pool = Math.max(0, totalTx - myObs.reduce((n, o) => n + o.paidCents, 0));
       for (let mo = 1; mo <= 12; mo++) {
         const label = periodLabel(year, mo);
