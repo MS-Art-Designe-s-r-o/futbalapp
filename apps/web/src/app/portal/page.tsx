@@ -152,7 +152,6 @@ export default function DashboardPage() {
       <MatchConfirmations />
       <NominationRequestsPanel />
       <RegistrationCards staff={staff} />
-      {isParent(me) && me && <ChildrenPayments children={me.children} />}
       {isPlayer(me) && me?.memberId && <MyPayments memberId={me.memberId} />}
 
       {staff && <PlayersByGroup />}
@@ -555,19 +554,6 @@ function Tile({
         <p className="fk-desc">{hint ?? 'Zobraziť zoznam'}</p>
       </Card>
     </Link>
-  );
-}
-
-function ChildrenPayments({ children }: { children: Array<{ id: string; firstName: string; lastName: string }> }) {
-  return (
-    <section className="space-y-3">
-      <h2 className="font-bold text-club-900">Moje deti</h2>
-      <div className="grid gap-3 sm:grid-cols-2">
-        {children.map((c) => (
-          <MyPayments key={c.id} memberId={c.id} name={`${c.firstName} ${c.lastName}`} />
-        ))}
-      </div>
-    </section>
   );
 }
 

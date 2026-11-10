@@ -183,7 +183,7 @@ export class FinanceController {
     return this.financeService.debtors();
   }
 
-  /** Rodič vidí platby len svojich detí; vedenie ľubovoľného člena. */
+  /** Člen vidí len vlastné platby (rodičia výsledky párovania nevidia); vedenie ľubovoľného člena. */
   @Get('members/:memberId/payments')
   async memberPayments(
     @Param('memberId') memberId: string,
@@ -193,11 +193,8 @@ export class FinanceController {
   ) {
     const isStaff = user.roles.some((r) => r.role === 'ADMIN' || r.role === 'MANAGER');
     if (!isStaff) {
-      const guardian = await this.prisma.guardian.findUnique({
-        where: { userId_memberId: { userId: user.id, memberId } },
-      });
       const ownMember = await this.prisma.member.findFirst({ where: { id: memberId, userId: user.id } });
-      if (!guardian && !ownMember) throw new ForbiddenException('Nemáte prístup k platbám tohto člena');
+      if (!ownMember) throw new ForbiddenException('Nemáte prístup k platbám tohto člena');
     }
     return this.financeService.memberPayments(memberId, from, to);
   }
