@@ -877,8 +877,9 @@ function Bank() {
           `za ${p.members.length} hráčov?\n\n${p.members.slice(0, 15).join(', ')}${p.members.length > 15 ? ', …' : ''}`,
       );
       if (!ok) return;
-      const r = await api<{ members: number; recipients: number; emailsSent: number }>('/finance/dunning/apology', { method: 'POST' });
-      setResult(`Oznam odoslaný: ${r.recipients} rodičov (push), ${r.emailsSent} e-mailov, ${r.members} hráčov.`);
+      const r = await api<{ members: number; recipients: number; emailsSent: number; emailError: string | null }>('/finance/dunning/apology', { method: 'POST' });
+      setResult(`Oznam odoslaný: ${r.recipients} rodičov (push), ${r.emailsSent} e-mailov, ${r.members} hráčov.` +
+          (r.emailError ? ` ⚠ E-maily sa neodoslali: ${r.emailError}` : ''));
     } catch (e) {
       setResult(e instanceof Error ? e.message : 'Chyba');
     } finally {

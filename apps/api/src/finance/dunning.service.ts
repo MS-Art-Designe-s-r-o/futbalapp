@@ -174,6 +174,11 @@ export class DunningService {
        <p>Ďakujeme za pochopenie.</p>
        <p>FK Košická Nová Ves</p>`,
     );
-    return { members: r.members.length, recipients: r.userIds.length, emailsSent: email.sent ? r.emails.length : 0 };
+    return {
+      members: r.members.length,
+      recipients: r.userIds.length,
+      emailsSent: email.sent ? r.emails.length : 0,
+      emailError: email.sent ? null : (email.reason ?? 'Neznáma chyba'),
+    };
   }
 }
