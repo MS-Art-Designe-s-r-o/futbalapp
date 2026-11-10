@@ -65,13 +65,6 @@ export class FinanceController {
     private readonly prisma: PrismaService,
   ) {}
 
-  /** Manuálne spustenie upomienok (inak bežia denne o 8:00). */
-  @Post('dunning/run')
-  @Roles('ADMIN', 'MANAGER')
-  runDunning() {
-    return this.dunningService.run();
-  }
-
   /** Náhľad príjemcov ospravedlnenia za testovacie upomienky. */
   @Get('dunning/apology')
   @Roles('ADMIN')

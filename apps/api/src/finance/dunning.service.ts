@@ -1,5 +1,4 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { Cron } from '@nestjs/schedule';
 import { PrismaService } from '../prisma/prisma.service';
 import { PushService } from '../notifications/push.service';
 import { EmailService } from '../notifications/email.service';
@@ -24,13 +23,6 @@ export class DunningService {
     private readonly pushService: PushService,
     private readonly emailService: EmailService,
   ) {}
-
-  /** Denne o 8:00 — upomienky sa neposielajú v noci. */
-  @Cron('0 8 * * *')
-  async daily() {
-    const result = await this.run();
-    this.logger.log(`Upomienky: ${JSON.stringify(result)}`);
-  }
 
   async run() {
     const now = new Date();

@@ -850,18 +850,6 @@ function Bank() {
     }
   }
 
-  async function runDunning() {
-    setBusy(true);
-    try {
-      const r = await api<{ membersNotified: number }>('/finance/dunning/run', { method: 'POST' });
-      setResult(`Upomienky odoslané ${r.membersNotified} dlžníkom (push + e-mail).`);
-    } catch (e) {
-      setResult(e instanceof Error ? e.message : 'Chyba');
-    } finally {
-      setBusy(false);
-    }
-  }
-
   async function sendApology() {
     setBusy(true);
     try {
@@ -905,15 +893,6 @@ function Bank() {
         </p>
         <Button onClick={runMatch} disabled={busy}>
           Spustiť párovanie
-        </Button>
-      </Card>
-      <Card className="space-y-3">
-        <h2 className="font-semibold text-club-800">Upomienky dlžníkom</h2>
-        <p className="text-sm text-gray-600">
-          Bežia automaticky denne o 8:00; tu ich viete spustiť manuálne. Rodičia dostanú push aj e-mail.
-        </p>
-        <Button variant="ghost" onClick={runDunning} disabled={busy}>
-          Spustiť upomienky teraz
         </Button>
       </Card>
       {result && <p className="text-sm text-club-700">{result}</p>}
