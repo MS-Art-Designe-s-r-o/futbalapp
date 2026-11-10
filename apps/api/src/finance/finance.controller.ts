@@ -171,12 +171,6 @@ export class FinanceController {
     return this.financeService.ignoreTransaction(txId);
   }
 
-  @Get('overview')
-  @Roles('ADMIN', 'MANAGER')
-  overview(@Query('year') year?: string) {
-    return this.financeService.paymentsOverview(Number(year) || new Date().getFullYear());
-  }
-
   @Get('debtors')
   @Roles('ADMIN', 'MANAGER')
   debtors() {
