@@ -3,6 +3,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { api, apiUpload } from '@/lib/api';
 import { Button, Card, ErrorText, Modal, inputCls, labelCls } from '@/components/ui';
+import PrehladTab from './prehlad';
+import VydavkyTab from './vydavky';
 
 interface Debtor {
   member: {
@@ -20,6 +22,7 @@ interface FeePlan {
   name: string;
   amountCents: number;
   period: string;
+  dueDate?: string | null;
   teamCategory: { code: string } | null;
   assignments: { id: string }[];
 }
@@ -28,19 +31,21 @@ interface Category {
   name: string;
 }
 
-type Tab = 'debtors' | 'plans' | 'matching' | 'bank';
+type Tab = 'overview' | 'debtors' | 'plans' | 'matching' | 'expenses' | 'bank';
 
 export default function PaymentsPage() {
-  const [tab, setTab] = useState<Tab>('debtors');
+  const [tab, setTab] = useState<Tab>('overview');
   return (
     <div className="space-y-5">
       <h1 className="text-2xl font-bold text-club-900">Platby</h1>
       <div className="flex gap-2 border-b border-club-100">
         {(
           [
+            ['overview', 'Prehľad'],
             ['debtors', 'Dlžníci'],
             ['plans', 'Predpisy'],
             ['matching', 'Párovanie platieb'],
+            ['expenses', 'Výdavky'],
             ['bank', 'Upomienky'],
           ] as [Tab, string][]
         ).map(([key, label]) => (
@@ -55,6 +60,8 @@ export default function PaymentsPage() {
           </button>
         ))}
       </div>
+      {tab === 'overview' && <PrehladTab />}
+      {tab === 'expenses' && <VydavkyTab />}
       {tab === 'debtors' && <Debtors />}
       {tab === 'plans' && <Plans />}
       {tab === 'matching' && <PaymentMatching />}
@@ -69,6 +76,7 @@ interface Obligation {
   amountCents: number;
   paidCents: number;
   status: string;
+  variableSymbol?: string | null;
 }
 
 function Debtors() {
@@ -164,6 +172,13 @@ function DebtorModal({ debtor, onClose, onChanged }: { debtor: Debtor; onClose: 
     await load();
     onChanged();
   }
+  async function markPaid(id: string) {
+    await api(`/finance/obligations/${id}`, { method: 'PATCH', body: JSON.stringify({ status: 'PAID' }) }).catch((e) =>
+      setError(e instanceof Error ? e.message : 'Chyba'),
+    );
+    await load();
+    onChanged();
+  }
   async function setAmount(id: string, eur: string) {
     const amountCents = Math.round(parseFloat(eur) * 100);
     if (!Number.isFinite(amountCents)) return;
@@ -191,7 +206,10 @@ function DebtorModal({ debtor, onClose, onChanged }: { debtor: Debtor; onClose: 
           <div className="divide-y divide-club-100 rounded-md border border-club-100">
             {obligations.map((o) => (
               <div key={o.id} className="flex items-center justify-between gap-2 px-3 py-2 text-sm">
-                <span className="text-gray-600">{o.periodLabel}</span>
+                <span className="text-gray-600">
+                  {o.periodLabel}
+                  {o.variableSymbol && <span className="block text-xs text-gray-400">VS {o.variableSymbol}</span>}
+                </span>
                 <div className="flex items-center gap-2">
                   <input
                     defaultValue={(o.amountCents / 100).toFixed(2)}
@@ -199,6 +217,9 @@ function DebtorModal({ debtor, onClose, onChanged }: { debtor: Debtor; onClose: 
                     className="w-20 rounded border border-gray-300 px-2 py-1 text-right"
                   />
                   <span className="text-gray-400">€</span>
+                  <button onClick={() => markPaid(o.id)} className="text-green-700 hover:underline">
+                    Uhradené
+                  </button>
                   <button onClick={() => waive(o.id)} className="text-amber-600 hover:underline">
                     Odpustiť
                   </button>
@@ -211,7 +232,8 @@ function DebtorModal({ debtor, onClose, onChanged }: { debtor: Debtor; onClose: 
           </div>
         )}
         <p className="text-xs text-gray-500">
-          „Odpustiť" označí povinnosť ako odpísanú (nebude dlhom). Sumu upravíte prepísaním hodnoty.
+          „Uhradené" označí povinnosť ako zaplatenú v plnej výške (napr. platba v hotovosti). „Odpustiť" ju odpíše (nebude
+          dlhom). „Zmazať" ju odstráni. Sumu upravíte prepísaním hodnoty.
         </p>
         <div className="flex justify-end">
           <Button onClick={onClose}>Zavrieť</Button>
@@ -259,7 +281,7 @@ function Plans() {
               <th className="px-4 py-3">Názov</th>
               <th className="px-4 py-3">Kategória</th>
               <th className="px-4 py-3">Suma</th>
-              <th className="px-4 py-3">Periodicita</th>
+              <th className="px-4 py-3">Typ</th>
               <th className="px-4 py-3">Priradení</th>
               <th className="px-4 py-3"></th>
             </tr>
@@ -268,9 +290,15 @@ function Plans() {
             {plans.map((p) => (
               <tr key={p.id}>
                 <td className="px-4 py-3 font-medium">{p.name}</td>
-                <td className="px-4 py-3">{p.teamCategory?.code ?? 'Celý klub'}</td>
+                <td className="px-4 py-3">{p.teamCategory?.code ?? (p.assignments.length > 0 ? 'Vybraní hráči' : 'Celý klub')}</td>
                 <td className="px-4 py-3">{(p.amountCents / 100).toFixed(2)} €</td>
-                <td className="px-4 py-3">{p.period === 'MONTHLY' ? 'Mesačne' : p.period}</td>
+                <td className="px-4 py-3">{p.period === 'MONTHLY'
+                    ? 'Pravidelná'
+                    : p.period === 'ONE_TIME'
+                      ? `Jednorazová${p.dueDate ? ` (do ${new Date(p.dueDate).toLocaleDateString('sk-SK')})` : ''}`
+                      : p.period === 'SEASONAL'
+                        ? 'Sezónna'
+                        : p.period}</td>
                 <td className="px-4 py-3">{p.assignments.length}</td>
                 <td className="px-4 py-3 text-right">
                   <div className="flex justify-end gap-3">
@@ -392,10 +420,38 @@ function FeePlanModal({
   const [amount, setAmount] = useState('25');
   const [category, setCategory] = useState('');
   const [dueDay, setDueDay] = useState('10');
+  const [period, setPeriod] = useState<'MONTHLY' | 'ONE_TIME'>('MONTHLY');
+  const [dueDate, setDueDate] = useState('');
+  const [memberIds, setMemberIds] = useState<string[]>([]);
+  const [members, setMembers] = useState<MemberOpt[]>([]);
+  const [q, setQ] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  useEffect(() => {
+    api<MemberOpt[]>('/members').then(setMembers).catch(() => {});
+  }, []);
+
+  const filtered = useMemo(() => {
+    const norm = (v: string) =>
+      v
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .toLowerCase()
+        .trim();
+    const s = norm(q);
+    return members.filter((m) => !s || norm(`${m.lastName} ${m.firstName}`).includes(s)).slice(0, 40);
+  }, [q, members]);
+
+  function toggleMember(id: string) {
+    setMemberIds((cur) => (cur.includes(id) ? cur.filter((x) => x !== id) : [...cur, id]));
+  }
+
   async function submit() {
+    if (period === 'ONE_TIME' && !dueDate) {
+      setError('Zadajte splatnosť.');
+      return;
+    }
     setBusy(true);
     setError(null);
     try {
@@ -405,9 +461,12 @@ function FeePlanModal({
           seasonId,
           name,
           amountCents: Math.round(parseFloat(amount) * 100),
-          period: 'MONTHLY',
-          dueDay: parseInt(dueDay, 10),
+          period,
+          ...(period === 'MONTHLY'
+            ? { dueDay: parseInt(dueDay, 10) }
+            : { dueDate: new Date(`${dueDate}T12:00:00Z`).toISOString() }),
           teamCategoryCode: category || undefined,
+          memberIds: memberIds.length > 0 ? memberIds : undefined,
         }),
       });
       onDone();
@@ -425,16 +484,31 @@ function FeePlanModal({
           <label className={labelCls}>Názov</label>
           <input value={name} onChange={(e) => setName(e.target.value)} className={inputCls} />
         </div>
+        <div>
+          <label className={labelCls}>Typ predpisu</label>
+          <select value={period} onChange={(e) => setPeriod(e.target.value as 'MONTHLY' | 'ONE_TIME')} className={inputCls}>
+            <option value="MONTHLY">Pravidelná (mesačná)</option>
+            <option value="ONE_TIME">Jednorazová</option>
+          </select>
+        </div>
         <div className="grid grid-cols-2 gap-3">
           <div>
-            <label className={labelCls}>Suma (€ / mesiac)</label>
+            <label className={labelCls}>{period === 'MONTHLY' ? 'Suma (€ / mesiac)' : 'Suma (€)'}</label>
             <input type="number" step="0.01" value={amount} onChange={(e) => setAmount(e.target.value)} className={inputCls} />
           </div>
-          <div>
-            <label className={labelCls}>Deň splatnosti</label>
-            <input type="number" min="1" max="28" value={dueDay} onChange={(e) => setDueDay(e.target.value)} className={inputCls} />
-          </div>
+          {period === 'MONTHLY' ? (
+            <div>
+              <label className={labelCls}>Deň splatnosti</label>
+              <input type="number" min="1" max="28" value={dueDay} onChange={(e) => setDueDay(e.target.value)} className={inputCls} />
+            </div>
+          ) : (
+            <div>
+              <label className={labelCls}>Splatnosť</label>
+              <input type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} className={inputCls} />
+            </div>
+          )}
         </div>
+        <p className="text-xs text-gray-500">Variabilný symbol: reg. číslo + mesiac + rok (CCCCCCCMMRR)</p>
         <div>
           <label className={labelCls}>Kategória</label>
           <select value={category} onChange={(e) => setCategory(e.target.value)} className={inputCls}>
@@ -445,7 +519,37 @@ function FeePlanModal({
               </option>
             ))}
           </select>
-          <p className="mt-1 text-xs text-gray-500">Predpis sa automaticky priradí aktívnym hráčom kategórie.</p>
+          <p className="mt-1 text-xs text-gray-500">
+            Predpis sa priradí aktívnym hráčom kategórie a/alebo vybraným hráčom. Bez výberu platí pre celý klub.
+          </p>
+        </div>
+        <div>
+          <label className={labelCls}>Konkrétni hráči (voliteľné)</label>
+          {memberIds.length > 0 && (
+            <div className="mb-2 flex flex-wrap gap-1">
+              {memberIds.map((id) => {
+                const m = members.find((x) => x.id === id);
+                return (
+                  <span key={id} className="inline-flex items-center gap-1 rounded-full bg-club-100 px-2 py-0.5 text-xs text-club-800">
+                    {m ? `${m.lastName} ${m.firstName}` : id}
+                    <button type="button" onClick={() => toggleMember(id)} className="text-club-600 hover:text-red-600">
+                      ×
+                    </button>
+                  </span>
+                );
+              })}
+            </div>
+          )}
+          <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Hľadať hráča…" className={inputCls} />
+          <div className="mt-1 max-h-40 divide-y divide-club-100 overflow-y-auto rounded-md border border-club-100">
+            {filtered.map((m) => (
+              <label key={m.id} className="flex cursor-pointer items-center gap-2 px-3 py-1.5 text-sm hover:bg-club-50">
+                <input type="checkbox" checked={memberIds.includes(m.id)} onChange={() => toggleMember(m.id)} />
+                {m.lastName} {m.firstName}
+              </label>
+            ))}
+            {filtered.length === 0 && <p className="px-3 py-3 text-sm text-gray-400">Žiadny člen.</p>}
+          </div>
         </div>
         <ErrorText>{error}</ErrorText>
         <div className="flex justify-end gap-2">
@@ -837,6 +941,7 @@ function MemberPicker({
 function Bank() {
   const [result, setResult] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [dunningOpen, setDunningOpen] = useState(false);
 
   async function runMatch() {
     setBusy(true);
@@ -876,6 +981,15 @@ function Bank() {
   return (
     <div className="space-y-4">
       <Card className="space-y-3">
+        <h2 className="font-semibold text-club-800">Rozoslať upomienky</h2>
+        <p className="text-sm text-gray-600">
+          Upomienky sa neposielajú automaticky. Po kliknutí sa zobrazí zoznam dlžníkov, z ktorého môžete niekoho vyradiť,
+          a až po potvrdení sa upomienky odošlú (push aj e-mail).
+        </p>
+        <Button onClick={() => setDunningOpen(true)}>Rozoslať upomienky</Button>
+      </Card>
+      {dunningOpen && <DunningModal onClose={() => setDunningOpen(false)} />}
+      <Card className="space-y-3">
         <h2 className="font-semibold text-club-800">Oznam: upomienky boli testovacie</h2>
         <p className="text-sm text-gray-600">
           Pošle všetkým rodičom, ktorým kedykoľvek odišla upomienka (oprávnená aj neoprávnená), push aj e-mail, že
@@ -897,5 +1011,149 @@ function Bank() {
       </Card>
       {result && <p className="text-sm text-club-700">{result}</p>}
     </div>
+  );
+}
+
+interface DunningRow {
+  memberId: string;
+  name: string;
+  emails: string[];
+  hasPushRecipients: boolean;
+  totalCents: number;
+  periods: string[];
+  obligationIds: string[];
+  level: number;
+  lastLevel?: number;
+}
+
+function DunningModal({ onClose }: { onClose: () => void }) {
+  const [rows, setRows] = useState<DunningRow[] | null>(null);
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [result, setResult] = useState<string | null>(null);
+
+  useEffect(() => {
+    api<DunningRow[]>('/finance/dunning/preview')
+      .then((r) => {
+        setRows(r);
+        setSelected(new Set(r.map((x) => x.memberId)));
+      })
+      .catch((e) => setError(e instanceof Error ? e.message : 'Načítanie zlyhalo'));
+  }, []);
+
+  const allSelected = !!rows && rows.length > 0 && rows.every((r) => selected.has(r.memberId));
+
+  function toggle(id: string) {
+    setSelected((cur) => {
+      const n = new Set(cur);
+      if (n.has(id)) n.delete(id);
+      else n.add(id);
+      return n;
+    });
+  }
+  function remove(id: string) {
+    setRows((cur) => (cur ? cur.filter((r) => r.memberId !== id) : cur));
+    setSelected((cur) => {
+      const n = new Set(cur);
+      n.delete(id);
+      return n;
+    });
+  }
+
+  async function send() {
+    setBusy(true);
+    setError(null);
+    try {
+      const r = await api<{ membersNotified: number; emailsSent: number; emailError: string | null }>(
+        '/finance/dunning/send',
+        { method: 'POST', body: JSON.stringify({ memberIds: Array.from(selected) }) },
+      );
+      setResult(
+        `Upomienky odoslané: ${r.membersNotified} hráčov, ${r.emailsSent} e-mailov.` +
+          (r.emailError ? ` ⚠ E-maily sa neodoslali: ${r.emailError}` : ''),
+      );
+      setRows([]);
+      setSelected(new Set());
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Odoslanie zlyhalo');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Modal open onClose={onClose} title="Rozoslať upomienky">
+      <div className="space-y-3">
+        <ErrorText>{error}</ErrorText>
+        {result && <p className="text-sm font-medium text-club-700">{result}</p>}
+        {!rows && !error && <p className="text-sm text-gray-500">Načítavam…</p>}
+        {rows && rows.length === 0 && !result && <p className="text-sm text-gray-500">Nikto nemá dlh na upomienku.</p>}
+        {rows && rows.length > 0 && (
+          <>
+            <div className="flex gap-3 text-sm">
+              <button
+                onClick={() => setSelected(allSelected ? new Set() : new Set(rows.map((r) => r.memberId)))}
+                className="text-club-600 hover:underline"
+              >
+                {allSelected ? 'Odznačiť všetkých' : 'Označiť všetkých'}
+              </button>
+            </div>
+            <div className="max-h-96 overflow-auto rounded-md border border-club-100">
+              <table className="w-full text-sm">
+                <thead className="bg-club-50 text-left text-club-800">
+                  <tr>
+                    <th className="px-2 py-2"></th>
+                    <th className="px-2 py-2">Hráč</th>
+                    <th className="px-2 py-2 text-right">Dlžná suma</th>
+                    <th className="px-2 py-2">Obdobia</th>
+                    <th className="px-2 py-2">Úroveň</th>
+                    <th className="px-2 py-2">Kontakt</th>
+                    <th className="px-2 py-2"></th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-club-100">
+                  {rows.map((r) => (
+                    <tr key={r.memberId} className="align-top">
+                      <td className="px-2 py-2">
+                        <input type="checkbox" checked={selected.has(r.memberId)} onChange={() => toggle(r.memberId)} />
+                      </td>
+                      <td className="px-2 py-2 font-medium">{r.name}</td>
+                      <td className="whitespace-nowrap px-2 py-2 text-right font-semibold text-red-700">
+                        {(r.totalCents / 100).toFixed(2)} €
+                      </td>
+                      <td className="px-2 py-2 text-gray-600">{r.periods.join(', ')}</td>
+                      <td className="whitespace-nowrap px-2 py-2">
+                        {r.level}.
+                        {r.lastLevel ? <span className="text-xs text-gray-400"> (naposledy {r.lastLevel}.)</span> : null}
+                      </td>
+                      <td className="px-2 py-2 text-xs text-gray-600">
+                        {r.emails.length > 0 ? r.emails.join(', ') : '—'}
+                        {r.hasPushRecipients && <div className="text-gray-400">+ push</div>}
+                      </td>
+                      <td className="px-2 py-2 text-right">
+                        <button onClick={() => remove(r.memberId)} className="text-gray-500 hover:underline">
+                          Vyradiť
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </>
+        )}
+        <div className="flex justify-end gap-2">
+          <Button variant="ghost" onClick={onClose}>
+            Zavrieť
+          </Button>
+          {rows && rows.length > 0 && (
+            <Button onClick={send} disabled={busy || selected.size === 0}>
+              {busy ? 'Odosielam…' : `Odoslať (${selected.size})`}
+            </Button>
+          )}
+        </div>
+      </div>
+    </Modal>
   );
 }

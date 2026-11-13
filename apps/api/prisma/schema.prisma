@@ -445,6 +445,8 @@ model FeePlan {
   currency       String    @default("EUR")
   period         FeePeriod
   dueDay         Int       @default(15)
+  /// Splatnosť jednorazového predpisu (period = ONE_TIME)
+  dueDate        DateTime?
   activeFrom     DateTime
   activeTo       DateTime?
 
@@ -509,11 +511,36 @@ model BankTransaction {
   importedAt       DateTime        @default(now())
 
   matches         PaymentMatch[]
+  expense         Expense?
   suggestedMember Member?        @relation("TxSuggestedMember", fields: [suggestedMemberId], references: [id])
   matchedMember   Member?        @relation("TxMatchedMember", fields: [matchedMemberId], references: [id])
 
   @@index([variableSymbol])
   @@index([matchStatus])
+}
+
+enum ExpenseStatus {
+  PLANNED
+  PAID
+}
+
+/// Výdavok klubu (plánovaný alebo uhradený; uhradené sa párujú s odchádzajúcimi pohybmi výpisu)
+model Expense {
+  id                String        @id @default(cuid())
+  payee             String
+  description       String?
+  amountCents       Int
+  variableSymbol    String?
+  iban              String?
+  dueDate           DateTime?
+  status            ExpenseStatus @default(PLANNED)
+  paidAt            DateTime?
+  bankTransactionId String?       @unique
+  createdAt         DateTime      @default(now())
+
+  bankTransaction BankTransaction? @relation(fields: [bankTransactionId], references: [id], onDelete: SetNull)
+
+  @@index([status])
 }
 
 /// Naučená väzba platobného účtu (IBAN) na člena — po prvom ručnom spárovaní

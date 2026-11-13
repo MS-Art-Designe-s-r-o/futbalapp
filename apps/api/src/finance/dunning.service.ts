@@ -1,12 +1,12 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { PushService } from '../notifications/push.service';
 import { EmailService } from '../notifications/email.service';
 
 /**
- * Automatické upomienky pri nezaplatenom členskom.
- * Eskalácia: 1. upomienka deň po splatnosti, 2. po týždni, 3. po dvoch týždňoch.
- * Každá úroveň sa pre danú povinnosť pošle len raz (eviduje DunningNotice).
+ * Upomienky pri nezaplatenom členskom — LEN RUČNE (žiadne automatické odosielanie).
+ * Vedenie si pozrie náhľad (preview) a vyberie členov, ktorým sa upomienka pošle (send).
+ * Úroveň eskalácie: 1 = deň po splatnosti, 2 = po týždni, 3 = po dvoch týždňoch.
  */
 const LEVEL_THRESHOLDS_DAYS: Array<{ level: number; days: number }> = [
   { level: 3, days: 15 },
@@ -14,28 +14,35 @@ const LEVEL_THRESHOLDS_DAYS: Array<{ level: number; days: number }> = [
   { level: 1, days: 1 },
 ];
 
+export interface DunningPreviewRow {
+  memberId: string;
+  name: string;
+  emails: string[];
+  hasPushRecipients: boolean;
+  totalCents: number;
+  periods: string[];
+  obligationIds: string[];
+  level: number;
+  lastLevel: number;
+}
+
 @Injectable()
 export class DunningService {
-  private readonly logger = new Logger(DunningService.name);
-
   constructor(
     private readonly prisma: PrismaService,
     private readonly pushService: PushService,
     private readonly emailService: EmailService,
   ) {}
 
-  async run() {
+  private async collect(): Promise<Array<DunningPreviewRow & { recipients: string[] }>> {
     const now = new Date();
-
-    // 1. preklop povinnosti po splatnosti na OVERDUE
     await this.prisma.paymentObligation.updateMany({
       where: { status: { in: ['PENDING', 'PARTIAL'] }, dueDate: { lt: now } },
       data: { status: 'OVERDUE' },
     });
-
-    // 2. zisti, ktoré povinnosti potrebujú (vyššiu) upomienku
     const overdue = await this.prisma.paymentObligation.findMany({
       where: { status: 'OVERDUE' },
+      orderBy: { dueDate: 'asc' },
       include: {
         dunning: { orderBy: { level: 'desc' }, take: 1 },
         member: {
@@ -50,50 +57,52 @@ export class DunningService {
       },
     });
 
-    // zoskupenie podľa člena — rodič dostane jednu správu za dieťa, nie za každý mesiac
-    const perMember = new Map<
-      string,
-      {
-        recipients: string[];
-        emails: string[];
-        name: string;
-        totalCents: number;
-        periods: string[];
-        obligationIds: string[];
-        level: number;
-      }
-    >();
-
-    for (const obligation of overdue) {
-      const daysOverdue = Math.floor((now.getTime() - obligation.dueDate.getTime()) / 86_400_000);
+    const perMember = new Map<string, DunningPreviewRow & { recipients: string[] }>();
+    for (const o of overdue) {
+      const daysOverdue = Math.floor((now.getTime() - o.dueDate.getTime()) / 86_400_000);
       const targetLevel = LEVEL_THRESHOLDS_DAYS.find((t) => daysOverdue >= t.days)?.level ?? 0;
-      const sentLevel = obligation.dunning[0]?.level ?? 0;
-      if (targetLevel <= sentLevel) continue;
-
-      const entry = perMember.get(obligation.memberId) ?? {
-        recipients: [
-          ...obligation.member.guardians.map((g) => g.userId),
-          ...(obligation.member.userId ? [obligation.member.userId] : []),
-        ],
-        emails: obligation.member.guardians.map((g) => g.user.email),
-        name: `${obligation.member.firstName} ${obligation.member.lastName}`,
+      const entry = perMember.get(o.memberId) ?? {
+        memberId: o.memberId,
+        recipients: [...o.member.guardians.map((g) => g.userId), ...(o.member.userId ? [o.member.userId] : [])],
+        emails: o.member.guardians.map((g) => g.user.email).filter((e): e is string => !!e),
+        hasPushRecipients: false,
+        name: `${o.member.firstName} ${o.member.lastName}`,
         totalCents: 0,
         periods: [],
         obligationIds: [],
         level: 0,
+        lastLevel: 0,
       };
-      entry.totalCents += obligation.amountCents - obligation.paidCents;
-      entry.periods.push(obligation.periodLabel);
-      entry.obligationIds.push(obligation.id);
+      entry.totalCents += o.amountCents - o.paidCents;
+      entry.periods.push(o.periodLabel);
+      entry.obligationIds.push(o.id);
       entry.level = Math.max(entry.level, targetLevel);
-      perMember.set(obligation.memberId, entry);
+      entry.lastLevel = Math.max(entry.lastLevel, o.dunning[0]?.level ?? 0);
+      entry.hasPushRecipients = entry.recipients.length > 0;
+      perMember.set(o.memberId, entry);
     }
+    return [...perMember.values()];
+  }
 
-    // 3. pošli a zaeviduj
+  /** Náhľad: všetci členovia s povinnosťami po splatnosti (nič sa neposiela). */
+  async preview(): Promise<DunningPreviewRow[]> {
+    const rows = await this.collect();
+    return rows
+      .map(({ recipients: _r, ...row }) => row)
+      .sort((a, b) => b.totalCents - a.totalCents);
+  }
+
+  /** Ručné odoslanie upomienky (push + e-mail) LEN vybraným členom. */
+  async send(memberIds: string[]) {
+    const wanted = new Set(memberIds);
+    const rows = (await this.collect()).filter((r) => wanted.has(r.memberId));
     let notified = 0;
-    for (const entry of perMember.values()) {
+    let emailsSent = 0;
+    let emailError: string | null = null;
+    for (const entry of rows) {
+      const level = Math.max(entry.level, 1);
       const amount = (entry.totalCents / 100).toFixed(2);
-      const urgency = entry.level >= 3 ? 'Posledná upomienka' : entry.level === 2 ? 'Pripomienka' : 'Upozornenie';
+      const urgency = level >= 3 ? 'Posledná upomienka' : level === 2 ? 'Pripomienka' : 'Upozornenie';
       await this.pushService.notifyUsers(entry.recipients, {
         title: `${urgency}: nezaplatené členské`,
         body: `${entry.name} — dlžné ${amount} € za obdobie ${entry.periods.join(', ')}. Prosíme o úhradu.`,
@@ -110,16 +119,17 @@ export class DunningService {
          <p>Ak ste medzičasom uhradili, správu považujte za bezpredmetnú.</p>
          <p>FK Košická Nová Ves</p>`,
       );
+      if (email.sent) emailsSent += entry.emails.length;
+      else if (entry.emails.length > 0) emailError = email.reason ?? 'Neznáma chyba';
       await this.prisma.dunningNotice.createMany({
         data: entry.obligationIds.flatMap((paymentObligationId) => [
-          { paymentObligationId, level: entry.level, channel: 'PUSH' },
-          ...(email.sent ? [{ paymentObligationId, level: entry.level, channel: 'EMAIL' }] : []),
+          { paymentObligationId, level, channel: 'PUSH' },
+          ...(email.sent ? [{ paymentObligationId, level, channel: 'EMAIL' }] : []),
         ]),
       });
       notified++;
     }
-
-    return { overdueObligations: overdue.length, membersNotified: notified };
+    return { membersNotified: notified, emailsSent, emailError };
   }
 
   /** Príjemcovia ospravedlnenia: rodičia (a členovia s účtom), ktorým kedykoľvek odišla upomienka. */

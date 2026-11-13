@@ -28,6 +28,31 @@ const createFeePlanSchema = z.object({
   amountCents: z.number().int().positive(),
   period: z.enum(['MONTHLY', 'QUARTERLY', 'ONE_TIME', 'SEASON']),
   dueDay: z.number().int().min(1).max(28).optional(),
+  dueDate: z.string().optional(),
+  memberIds: z.array(z.string().min(1)).optional(),
+});
+
+const assignMembersSchema = z.object({ memberIds: z.array(z.string().min(1)).min(1) });
+
+const dunningSendSchema = z.object({ memberIds: z.array(z.string().min(1)).min(1) });
+
+const createExpenseSchema = z.object({
+  payee: z.string().min(1),
+  amountCents: z.number().int().positive(),
+  variableSymbol: z.string().optional(),
+  dueDate: z.string().optional(),
+  iban: z.string().optional(),
+  description: z.string().optional(),
+});
+
+const updateExpenseSchema = z.object({
+  payee: z.string().min(1).optional(),
+  amountCents: z.number().int().positive().optional(),
+  variableSymbol: z.string().nullable().optional(),
+  dueDate: z.string().nullable().optional(),
+  iban: z.string().nullable().optional(),
+  description: z.string().nullable().optional(),
+  status: z.enum(['PLANNED', 'PAID']).optional(),
 });
 
 const assignSchema = z.object({ memberId: z.string().min(1) });
@@ -77,6 +102,76 @@ export class FinanceController {
   @Roles('ADMIN')
   sendApology() {
     return this.dunningService.sendApology();
+  }
+
+  /** Náhľad upomienok: všetci členovia s povinnosťami po splatnosti (nič sa neposiela). */
+  @Get('dunning/preview')
+  @Roles('ADMIN', 'MANAGER')
+  dunningPreview() {
+    return this.dunningService.preview();
+  }
+
+  /** Ručné odoslanie upomienky (push + e-mail) len vybraným členom. */
+  @Post('dunning/send')
+  @Roles('ADMIN', 'MANAGER')
+  dunningSend(@Body(new ZodValidationPipe(dunningSendSchema)) body: z.infer<typeof dunningSendSchema>) {
+    return this.dunningService.send(body.memberIds);
+  }
+
+  @Get('overview')
+  @Roles('ADMIN', 'MANAGER')
+  overview(@Query('year') year?: string, @Query('month') month?: string) {
+    const y = year ? Number(year) : new Date().getUTCFullYear();
+    const m = month ? Number(month) : null;
+    if (!Number.isInteger(y) || y < 2000 || y > 2100) throw new BadRequestException('Neplatný rok');
+    if (m !== null && (!Number.isInteger(m) || m < 1 || m > 12)) throw new BadRequestException('Neplatný mesiac');
+    return this.financeService.overview(y, m);
+  }
+
+  @Get('expenses')
+  @Roles('ADMIN', 'MANAGER')
+  listExpenses(@Query('status') status?: string, @Query('year') year?: string, @Query('month') month?: string) {
+    return this.financeService.listExpenses({
+      status,
+      year: year ? Number(year) : undefined,
+      month: month ? Number(month) : undefined,
+    });
+  }
+
+  @Post('expenses')
+  @Roles('ADMIN', 'MANAGER')
+  createExpense(@Body(new ZodValidationPipe(createExpenseSchema)) body: z.infer<typeof createExpenseSchema>) {
+    return this.financeService.createExpense(body);
+  }
+
+  @Patch('expenses/:id')
+  @Roles('ADMIN', 'MANAGER')
+  updateExpense(@Param('id') id: string, @Body(new ZodValidationPipe(updateExpenseSchema)) body: z.infer<typeof updateExpenseSchema>) {
+    return this.financeService.updateExpense(id, body);
+  }
+
+  @Delete('expenses/:id')
+  @Roles('ADMIN', 'MANAGER')
+  deleteExpense(@Param('id') id: string) {
+    return this.financeService.deleteExpense(id);
+  }
+
+  @Post('expenses/:id/pay')
+  @Roles('ADMIN', 'MANAGER')
+  payExpense(@Param('id') id: string) {
+    return this.financeService.payExpense(id);
+  }
+
+  @Post('fee-plans/:id/assign-members')
+  @Roles('ADMIN', 'MANAGER')
+  assignMembers(@Param('id') id: string, @Body(new ZodValidationPipe(assignMembersSchema)) body: z.infer<typeof assignMembersSchema>) {
+    return this.financeService.assignMembers(id, body.memberIds);
+  }
+
+  @Delete('fee-plans/:id/assign/:memberId')
+  @Roles('ADMIN', 'MANAGER')
+  unassignMember(@Param('id') id: string, @Param('memberId') memberId: string) {
+    return this.financeService.unassignMember(id, memberId);
   }
 
   @Get('fee-plans')
@@ -170,7 +265,10 @@ export class FinanceController {
     return this.financeService.debtors();
   }
 
-  /** Člen vidí len vlastné platby (rodičia výsledky párovania nevidia); vedenie ľubovoľného člena. */
+  /**
+   * Vedenie (ADMIN/MANAGER) vidí všetko vrátane výsledkov párovania; hráč (vlastné platby)
+   * a rodič (platby svojho dieťaťa) len periodLabel, sumy, stav, splatnosť, VS a planName.
+   */
   @Get('members/:memberId/payments')
   async memberPayments(
     @Param('memberId') memberId: string,
@@ -180,9 +278,12 @@ export class FinanceController {
   ) {
     const isStaff = user.roles.some((r) => r.role === 'ADMIN' || r.role === 'MANAGER');
     if (!isStaff) {
-      const ownMember = await this.prisma.member.findFirst({ where: { id: memberId, userId: user.id } });
-      if (!ownMember) throw new ForbiddenException('Nemáte prístup k platbám tohto člena');
+      const [ownMember, guardian] = await Promise.all([
+        this.prisma.member.findFirst({ where: { id: memberId, userId: user.id } }),
+        this.prisma.guardian.findUnique({ where: { userId_memberId: { userId: user.id, memberId } } }),
+      ]);
+      if (!ownMember && !guardian) throw new ForbiddenException('Nemáte prístup k platbám tohto člena');
     }
-    return this.financeService.memberPayments(memberId, from, to);
+    return this.financeService.memberPayments(memberId, from, to, isStaff);
   }
 }

@@ -39,7 +39,7 @@ function toText(value: unknown): string | undefined {
 
 /**
  * Rozparsuje bankový výpis (VÚB/„export pohybov na účte", .xls aj .xlsx) na
- * prichádzajúce platby. Berie len kredity (Suma > 0). Deduplikáciu rieši
+ * pohyby: kredity (Suma > 0) aj debety (Suma < 0, odchádzajúce platby = výdavky). Deduplikáciu rieši
  * externalId (Číslo dokladu) na úrovni importu.
  */
 export function parseBankStatement(buffer: Buffer): BankRow[] {
@@ -73,7 +73,7 @@ export function parseBankStatement(buffer: Buffer): BankRow[] {
 
     const amount = typeof raw.amountCents === 'number' ? raw.amountCents : Number(raw.amountCents);
     const externalId = toText(raw.externalId);
-    if (!externalId || !Number.isFinite(amount) || amount <= 0) continue; // len prichádzajúce platby
+    if (!externalId || !Number.isFinite(amount) || amount === 0) continue; // kredity (+) aj debety (−)
 
     const date = toDate(raw.date) ?? toDate(raw.bookingDate);
     if (!date) continue;

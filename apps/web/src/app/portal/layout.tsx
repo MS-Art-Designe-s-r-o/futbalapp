@@ -30,6 +30,7 @@ const navigation: Entry[] = [
       { href: '/portal/clanky', label: 'Články', show: ({ staff }) => staff },
       { href: '/portal/obsah', label: 'Obsah webu', show: ({ staff }) => staff },
       { href: '/portal/platby', label: 'Platby', show: ({ staff }) => staff },
+      { href: '/portal/moje-platby', label: 'Moje platby', show: ({ staff, manage }) => !staff && !manage },
       { href: '/portal/prispevok', label: 'Príspevok', show: () => true },
       { href: '/portal/nastavenia', label: 'Nastavenia', show: ({ staff }) => staff },
     ],

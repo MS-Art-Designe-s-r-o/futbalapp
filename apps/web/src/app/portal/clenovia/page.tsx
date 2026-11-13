@@ -2,6 +2,8 @@
 
 import { Suspense, useCallback, useEffect, useRef, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
+import { formatEventDateSk } from '@fkknv/shared';
+import { MemberPaymentsPanel } from '@/components/member-payments-panel';
 import { api, apiUpload, API_URL } from '@/lib/api';
 import { categoryColor } from '@/lib/colors';
 import { isAdmin, isStaff, useMe } from '@/lib/auth';
@@ -710,7 +712,7 @@ function MemberModal({
   const [tempPassword, setTempPassword] = useState<string | null>(null);
   const [photoVer, setPhotoVer] = useState(0);
   const [photoBusy, setPhotoBusy] = useState(false);
-  const [tab, setTab] = useState<'info' | 'parents' | 'attendance' | 'tests'>('info');
+  const [tab, setTab] = useState<'info' | 'parents' | 'attendance' | 'tests' | 'payments'>('info');
 
   const hasAccount = !!member?.user;
   const isParent = roles.includes('PARENT');
@@ -936,6 +938,7 @@ function MemberModal({
               { key: 'parents', label: 'Rodičia' },
               { key: 'attendance', label: 'Dochádzka' },
               { key: 'tests', label: 'Testovanie' },
+              ...(member && staff ? [{ key: 'payments' as const, label: 'Platby' }] : []),
             ]}
             value={tab}
             onChange={setTab}
@@ -946,6 +949,7 @@ function MemberModal({
         {isPlayerLike && tab === 'tests' && member && (
           <PlayerFitnessPanel memberId={member.id} teams={member.memberships.map((m) => m.team)} />
         )}
+        {isPlayerLike && tab === 'payments' && member && staff && <MemberPaymentsPanel memberId={member.id} />}
         {(!isPlayerLike || tab === 'info') && (
           <>
         {/* Fotka hráča (na karte) */}
