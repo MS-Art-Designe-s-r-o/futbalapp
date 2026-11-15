@@ -2,7 +2,7 @@
 
 import { Suspense, useCallback, useEffect, useRef, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
-import { formatEventDateSk } from '@fkknv/shared';
+import { formatEventDateSk, PLAYER_POSITIONS, PLAYER_POSITION_LABELS_SK } from '@fkknv/shared';
 import { MemberPaymentsPanel } from '@/components/member-payments-panel';
 import { api, apiUpload, API_URL } from '@/lib/api';
 import { categoryColor } from '@/lib/colors';
@@ -26,6 +26,7 @@ interface MemberRow {
   photoUrl?: string | null;
   socialCase?: boolean;
   isGoalkeeper?: boolean;
+  position?: string | null;
   licenseLevel?: string | null;
   registrationValidUntil?: string | null;
   homeClub?: string | null;
@@ -687,6 +688,7 @@ function MemberModal({
   );
   const [socialCase, setSocialCase] = useState(member?.socialCase ?? false);
   const [isGoalkeeper, setIsGoalkeeper] = useState(member?.isGoalkeeper ?? false);
+  const [position, setPosition] = useState(member?.position ?? '');
   const [licenseLevel, setLicenseLevel] = useState(member?.licenseLevel ?? '');
   const [healthNotes, setHealthNotes] = useState(member?.healthNotes ?? '');
   const [teamIds, setTeamIds] = useState<string[]>(() => {
@@ -823,6 +825,7 @@ function MemberModal({
       registrationValidUntil: registrationValidUntil || undefined,
       socialCase,
       isGoalkeeper,
+      position: position || null,
       licenseLevel: licenseLevel || undefined,
       healthNotes: healthNotes || undefined,
       homeClub: homeClub || undefined,
@@ -1086,6 +1089,19 @@ function MemberModal({
               Brankár
             </label>
           </div>
+        </div>
+
+        {/* Postavenie hráča */}
+        <div>
+          <label className={labelCls}>Postavenie hráča</label>
+          <select value={position} onChange={(e) => setPosition(e.target.value)} className={inputCls}>
+            <option value="">— nezadané —</option>
+            {PLAYER_POSITIONS.map((p) => (
+              <option key={p} value={p}>
+                {PLAYER_POSITION_LABELS_SK[p]}
+              </option>
+            ))}
+          </select>
         </div>
 
         {/* Konto na prihlásenie */}

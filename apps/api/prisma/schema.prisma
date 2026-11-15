@@ -118,6 +118,8 @@ model Member {
   socialCase     Boolean      @default(false)
   /// brankár — doplnková funkcia hráča (štítok/filter, bez zmeny práv)
   isGoalkeeper   Boolean      @default(false)
+  /// postavenie hráča (kód z PLAYER_POSITIONS, napr. CB)
+  position       String?
   /// úroveň trénerskej licencie: A_PRO | A | B | C | GK (brankár)
   licenseLevel   String?
 

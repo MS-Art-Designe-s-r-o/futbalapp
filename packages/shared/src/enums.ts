@@ -19,6 +19,22 @@ export const EVENT_TYPE_LABELS_SK: Record<EventType, string> = {
   PARENT_MEETING: 'Rodičovské združenie',
 };
 
+/** Postavenie hráča na ihrisku. */
+export const PLAYER_POSITIONS = ['GK', 'RB', 'LB', 'CB', 'CDM', 'CM', 'CAM', 'RW', 'LW', 'ST'] as const;
+export type PlayerPosition = (typeof PLAYER_POSITIONS)[number];
+export const PLAYER_POSITION_LABELS_SK: Record<PlayerPosition, string> = {
+  GK: 'Brankár (GK)',
+  RB: 'Pravý obranca (RB)',
+  LB: 'Ľavý obranca (LB)',
+  CB: 'Stredný obranca / Stopér (CB)',
+  CDM: 'Defenzívny stredopoliar (CDM)',
+  CM: 'Stredopoliar (CM)',
+  CAM: 'Ofenzívny stredopoliar (CAM)',
+  RW: 'Pravý krídelník (RW)',
+  LW: 'Ľavý krídelník (LW)',
+  ST: 'Útočník (ST)',
+};
+
 /** Označenie priateľského zápasu (Match.isFriendly) — napr. namiesto súťaže. */
 export const FRIENDLY_MATCH_LABEL_SK = 'Priateľský zápas';
 

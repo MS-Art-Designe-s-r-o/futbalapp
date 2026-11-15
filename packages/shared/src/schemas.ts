@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { ROLES, MEMBER_STATUSES, ATTENDANCE_STATUSES, EVENT_TYPES, MATCH_EVENT_TYPES, SURFACE_CODES } from './enums';
+import { ROLES, MEMBER_STATUSES, ATTENDANCE_STATUSES, EVENT_TYPES, MATCH_EVENT_TYPES, SURFACE_CODES, PLAYER_POSITIONS } from './enums';
 import { parseRodneCislo } from './rodne-cislo';
 
 export const loginSchema = z.object({
@@ -88,6 +88,8 @@ export const createMemberSchema = z.object({
   socialCase: z.boolean().optional(),
   /// brankár (doplnková funkcia hráča)
   isGoalkeeper: z.boolean().optional(),
+  /// postavenie hráča (prázdne = nezadané)
+  position: z.enum(PLAYER_POSITIONS).nullable().optional(),
   /// úroveň trénerskej licencie
   licenseLevel: z.enum(['A_PRO', 'A', 'B', 'C', 'GK']).optional(),
   /// registračný preukaz / futbalnet
