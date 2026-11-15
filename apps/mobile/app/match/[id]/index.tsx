@@ -9,6 +9,7 @@ import {
   computeMatchClock,
   formatEventTimeSk,
   type MatchEventType,
+  type MatchLineup,
   type MatchTimerAction,
 } from '@fkknv/shared';
 import { API_URL, api, getToken } from '@/api';
@@ -17,11 +18,12 @@ import { enqueue, flush } from '@/offline';
 import { ui } from '@/theme';
 import { JerseyPair, JerseyPicker, jerseyList } from '@/JerseySwatch';
 import { KeyboardScreen } from '@/KeyboardScreen';
+import { LineupBoard } from '@/LineupBoard';
 import { MatchTimerCard, timerOf, type MatchTimerFields } from '@/MatchTimerCard';
 
 interface Nomination {
   id: string;
-  member: { id: string; firstName: string; lastName: string };
+  member: { id: string; firstName: string; lastName: string; position?: string | null };
 }
 
 interface MatchEventRow {
@@ -53,9 +55,10 @@ interface MatchDetail extends MatchTimerFields {
     address?: string | null;
     tournamentOrder?: number | null;
     parent?: { id: string; title: string } | null;
-    team: { id: string; name: string } | null;
+    team: { id: string; name: string; teamCategory?: { code: string } } | null;
   };
   nominations: Nomination[];
+  lineup?: MatchLineup | null;
   events: MatchEventRow[];
   photos: Array<{ id: string; mimeType: string; size: number; createdAt: string }>;
 }
@@ -764,6 +767,16 @@ export default function MatchLiveScreen() {
           ))}
         </>
       )}
+
+      <LineupBoard
+        matchId={match.id}
+        players={match.nominations.map((n) => n.member)}
+        lineup={match.lineup}
+        categoryCode={match.event.team?.teamCategory?.code}
+        manage={canControl}
+        title={`${match.event.team?.name ?? 'FKKNV'} – ${match.opponent}`}
+        onSaved={() => void load()}
+      />
 
       <Text style={styles.sectionTitle}>Priebeh zápasu</Text>
       {match.events.length === 0 && <Text style={styles.empty}>Zatiaľ žiadne udalosti.</Text>}

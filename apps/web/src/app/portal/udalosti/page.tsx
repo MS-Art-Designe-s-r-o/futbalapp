@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import {
   WEEKDAY_SHORT_SK,
   SURFACE_CODES,
@@ -1034,6 +1035,7 @@ function MatchModal({
   teams: Team[];
   onDone: () => void;
 }) {
+  const router = useRouter();
   const [pitchId, setPitchId] = useState('');
   const [teamId, setTeamId] = useState('');
   const [type, setType] = useState<'MATCH' | 'FRIENDLY' | 'TOURNAMENT'>('MATCH');
@@ -1101,7 +1103,7 @@ function MatchModal({
         onDone();
         return;
       }
-      await api('/events', {
+      const created = await api<{ match?: { id: string } | null }>('/events', {
         method: 'POST',
         body: JSON.stringify({
           type: 'MATCH',
@@ -1118,6 +1120,8 @@ function MatchModal({
         }),
       });
       onDone();
+      // po založení zápasu rovno na jeho detail: nominácia a rozostavenie hráčov
+      if (created.match?.id) router.push(`/portal/zapasy/${created.match.id}`);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Uloženie zlyhalo');
     } finally {

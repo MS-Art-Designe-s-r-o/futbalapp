@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import {
   LINEUP_FORMATS,
+  buildLineupPrintHtml,
   PLAYER_POSITION_LABELS_SK,
   PLAYER_POSITION_SHORT,
   defaultLineupFormat,
@@ -34,6 +35,9 @@ export function LineupBoard({
   categoryCode,
   manage,
   onSaved,
+  printTitle = 'Rozostavenie',
+  printSubtitle,
+  notes,
 }: {
   matchId: string;
   players: Player[];
@@ -41,6 +45,9 @@ export function LineupBoard({
   categoryCode?: string | null;
   manage: boolean;
   onSaved: () => void;
+  printTitle?: string;
+  printSubtitle?: string;
+  notes?: string | null;
 }) {
   const [format, setFormat] = useState(lineup?.format ?? defaultLineupFormat(categoryCode));
   const [formation, setFormation] = useState(lineup?.formation ?? Object.keys(LINEUP_FORMATS[format].formations)[0]);
@@ -122,6 +129,35 @@ export function LineupBoard({
     setSlots(next);
     setSaved(false);
   }
+  /** Tlač A4: rozostavenie sa vykreslí do skrytého rámca a otvorí sa tlačový dialóg. */
+  function printLineup() {
+    const html = buildLineupPrintHtml({
+      title: printTitle,
+      subtitle: printSubtitle,
+      format,
+      formation,
+      slots: formationSlots.map((s, i) => {
+        const p = byId.get(slots[String(i)] ?? '');
+        return { pos: s.pos, x: s.x, y: s.y, name: p ? `${p.lastName} ${p.firstName}` : null };
+      }),
+      bench: players.filter((p) => !used.has(p.id)).map((p) => `${p.lastName} ${p.firstName}`),
+      notes,
+    });
+    const frame = document.createElement('iframe');
+    frame.style.cssText = 'position:fixed;right:0;bottom:0;width:0;height:0;border:0';
+    document.body.appendChild(frame);
+    const doc = frame.contentDocument;
+    if (!doc || !frame.contentWindow) return frame.remove();
+    doc.open();
+    doc.write(html);
+    doc.close();
+    setTimeout(() => {
+      frame.contentWindow?.focus();
+      frame.contentWindow?.print();
+      setTimeout(() => frame.remove(), 2000);
+    }, 250);
+  }
+
   async function save(clear = false) {
     setBusy(true);
     setError(null);
@@ -277,6 +313,9 @@ export function LineupBoard({
                 <Button onClick={() => save()} disabled={busy}>
                   {busy ? 'Ukladám…' : saved ? 'Uložené ✓' : 'Uložiť rozostavenie'}
                 </Button>
+                <Button variant="ghost" onClick={printLineup} disabled={Object.keys(slots).length === 0}>
+                  🖨 Vytlačiť A4
+                </Button>
               </div>
             </>
           ) : (
@@ -293,6 +332,13 @@ export function LineupBoard({
                 ) : null;
               })}
             </ul>
+          )}
+          {!manage && (
+            <div className="mt-3">
+              <Button variant="ghost" onClick={printLineup}>
+                🖨 Vytlačiť A4
+              </Button>
+            </div>
           )}
         </div>
       </div>

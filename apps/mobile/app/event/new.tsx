@@ -158,7 +158,7 @@ export default function NewEventScreen() {
         });
       } else {
         const team = teams.find((t) => t.id === teamId);
-        await api('/events', {
+        const created = await api<{ match?: { id: string } | null }>('/events', {
           method: 'POST',
           body: JSON.stringify({
             type: 'MATCH',
@@ -173,6 +173,11 @@ export default function NewEventScreen() {
             jerseyColors: jerseyColor,
           }),
         });
+        // po založení zápasu rovno na jeho detail: nominácia a rozostavenie hráčov
+        if (created?.match?.id) {
+          router.replace(`/match/${created.match.id}`);
+          return;
+        }
       }
       Alert.alert('Hotovo', 'Udalosť bola vytvorená.');
       router.back();

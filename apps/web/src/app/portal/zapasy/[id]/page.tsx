@@ -939,6 +939,9 @@ export default function MatchPage({ params }: { params: Promise<{ id: string }> 
           categoryCode={match.event.team?.teamCategory?.code}
           manage={manage}
           onSaved={() => void load()}
+          printTitle={`${match.event.team?.name ?? 'FKKNV'} – ${match.opponent}${match.isHome ? ' (doma)' : ' (vonku)'}`}
+          printSubtitle={`${formatEventDateTimeSk(new Date(match.event.startAt))}${match.event.location ? ' · ' + match.event.location : ''}`}
+          notes={match.notes}
         />
 
         {/* Živý zápis */}

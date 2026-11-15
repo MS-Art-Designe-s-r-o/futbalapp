@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import type { PlayerPosition } from './enums';
+import { PLAYER_POSITION_SHORT, type PlayerPosition } from './enums';
 
 /** Post na ihrisku: postavenie + poloha v % (zvislé ihrisko, vlastná bránka dole). */
 export interface LineupSlot {
@@ -69,3 +69,61 @@ export const matchLineupSchema = z
     }
   });
 export type MatchLineup = z.infer<typeof matchLineupSchema>;
+
+export interface LineupPrintInput {
+  title: string;
+  subtitle?: string;
+  format: string;
+  formation: string;
+  /** obsadené/voľné posty v poradí formácie */
+  slots: Array<{ pos: PlayerPosition; x: number; y: number; name: string | null }>;
+  /** nominovaní hráči mimo základnej zostavy */
+  bench: string[];
+  notes?: string | null;
+}
+
+const esc = (v: string) =>
+  v.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+
+/** Samostatný HTML dokument rozostavenia na tlač (A4 na výšku, úsporný na farbu). */
+export function buildLineupPrintHtml(i: LineupPrintInput): string {
+  const dots = i.slots
+    .map(
+      (s) =>
+        `<div class="slot" style="left:${s.x}%;top:${s.y}%"><span class="dot${s.name ? ' on' : ''}">${esc(PLAYER_POSITION_SHORT[s.pos])}</span><span class="nm">${esc(s.name ?? '')}</span></div>`,
+    )
+    .join('');
+  const list = i.slots
+    .map((s, n) => `<li><b>${esc(PLAYER_POSITION_SHORT[s.pos])}</b> ${s.name ? esc(s.name) : '<i>voľné</i>'}</li>`.replace('<li>', `<li value="${n + 1}">`))
+    .join('');
+  const bench = i.bench.length ? i.bench.map((b) => `<li>${esc(b)}</li>`).join('') : '<li><i>—</i></li>';
+  return `<!doctype html><html lang="sk"><head><meta charset="utf-8"><title>${esc(i.title)}</title><style>
+@page{size:A4 portrait;margin:12mm}
+*{box-sizing:border-box}
+body{margin:0;font-family:Arial,Helvetica,sans-serif;color:#111;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+h1{font-size:20pt;margin:0 0 2mm}
+.sub{font-size:10.5pt;color:#444;margin-bottom:5mm}
+.wrap{display:flex;gap:8mm;align-items:flex-start}
+.pitch{position:relative;width:118mm;height:174mm;border:1.2pt solid #1c6b43;background:#f4faf6;flex:none}
+.pitch svg{position:absolute;inset:0;width:100%;height:100%}
+.pitch svg *{fill:none;stroke:#1c6b43;stroke-width:.45}
+.slot{position:absolute;transform:translate(-50%,-50%);width:26mm;text-align:center}
+.dot{display:inline-block;width:9.5mm;height:9.5mm;line-height:8.3mm;border-radius:50%;border:1.2pt dashed #1c6b43;font-size:7pt;font-weight:700;background:#fff;color:#1c6b43}
+.dot.on{border-style:solid;background:#1c6b43;color:#fff}
+.nm{display:block;font-size:8.5pt;font-weight:700;line-height:1.15;margin-top:.6mm}
+.side{flex:1;min-width:0}
+h2{font-size:10pt;text-transform:uppercase;letter-spacing:.6pt;margin:0 0 2mm;color:#1c6b43;border-bottom:.8pt solid #1c6b43;padding-bottom:1mm}
+ol,ul{margin:0 0 6mm;padding-left:5mm;font-size:10pt;line-height:1.55}
+ol{list-style:decimal}
+.notes{font-size:9.5pt;border:.8pt solid #999;padding:2mm;min-height:20mm;white-space:pre-wrap}
+.foot{margin-top:5mm;font-size:8pt;color:#777}
+</style></head><body>
+<h1>${esc(i.title)}</h1>
+<div class="sub">${i.subtitle ? esc(i.subtitle) + ' · ' : ''}Formát ${esc(i.format)} · rozostavenie ${esc(i.formation)}</div>
+<div class="wrap">
+<div class="pitch"><svg viewBox="0 0 68 100" preserveAspectRatio="none"><rect x="2" y="2" width="64" height="96"/><line x1="2" y1="50" x2="66" y2="50"/><circle cx="34" cy="50" r="8"/><rect x="16" y="2" width="36" height="14"/><rect x="26" y="2" width="16" height="5"/><rect x="16" y="84" width="36" height="14"/><rect x="26" y="93" width="16" height="5"/></svg>${dots}</div>
+<div class="side"><h2>Základná zostava</h2><ol>${list}</ol><h2>Náhradníci</h2><ul>${bench}</ul>${i.notes ? `<h2>Poznámky</h2><div class="notes">${esc(i.notes)}</div>` : ''}</div>
+</div>
+<div class="foot">FK Košická Nová Ves · portál FKKNV</div>
+</body></html>`;
+}
