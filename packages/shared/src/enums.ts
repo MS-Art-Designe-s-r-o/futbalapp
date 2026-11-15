@@ -20,9 +20,10 @@ export const EVENT_TYPE_LABELS_SK: Record<EventType, string> = {
 };
 
 /** Postavenie hráča na ihrisku (kód → názov a skratka). */
-export const PLAYER_POSITIONS = ['CB', 'FB', 'WB', 'CDM', 'CM', 'CAM', 'WM', 'ST', 'W', 'SS'] as const;
+export const PLAYER_POSITIONS = ['GK', 'CB', 'FB', 'WB', 'CDM', 'CM', 'CAM', 'WM', 'ST', 'W', 'SS'] as const;
 export type PlayerPosition = (typeof PLAYER_POSITIONS)[number];
 export const PLAYER_POSITION_LABELS_SK: Record<PlayerPosition, string> = {
+  GK: 'Brankár (GK)',
   CB: 'Stredný obranca / Stopér (CB)',
   FB: 'Krajný obranca (LB / RB)',
   WB: 'Krídelný obranca / Wing-back (LWB / RWB)',
@@ -36,6 +37,7 @@ export const PLAYER_POSITION_LABELS_SK: Record<PlayerPosition, string> = {
 };
 /** Krátka skratka postavenia (zobrazuje sa pri mene hráča). */
 export const PLAYER_POSITION_SHORT: Record<PlayerPosition, string> = {
+  GK: 'GK',
   CB: 'CB',
   FB: 'LB/RB',
   WB: 'LWB/RWB',
