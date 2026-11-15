@@ -18,13 +18,14 @@ import {
 } from '@fkknv/shared';
 import { JerseyBadges, JerseyPicker } from '@/components/jersey';
 import { api } from '@/lib/api';
-import { coachTeams, isStaff, useMe } from '@/lib/auth';
+import { canManage, coachTeams, isStaff, useMe } from '@/lib/auth';
 import { Button, Card, PlayerPos } from '@/components/ui';
 import { AddressLink } from '@/components/AddressLink';
 import { MapEmbed } from '@/components/MapEmbed';
 import { EventAdminActions } from '@/components/event-admin-actions';
 import { CrossNomination } from '@/components/cross-nomination';
 import { LineupBoard } from '@/components/lineup-board';
+import { LineupDiscussion } from '@/components/lineup-discussion';
 import { MatchMedia, type MatchPhotoItem, type MatchVideoItem } from '@/components/match-media';
 
 interface Member {
@@ -943,6 +944,8 @@ export default function MatchPage({ params }: { params: Promise<{ id: string }> 
           printSubtitle={`${formatEventDateTimeSk(new Date(match.event.startAt))}${match.event.location ? ' · ' + match.event.location : ''}`}
           notes={match.notes}
         />
+
+        {canManage(me) && <LineupDiscussion matchId={match.id} meId={me?.id} isStaff={isStaff(me)} />}
 
         {/* Živý zápis */}
         <Card>

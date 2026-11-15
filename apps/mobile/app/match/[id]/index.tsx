@@ -19,6 +19,7 @@ import { ui } from '@/theme';
 import { JerseyPair, JerseyPicker, jerseyList } from '@/JerseySwatch';
 import { KeyboardScreen } from '@/KeyboardScreen';
 import { LineupBoard } from '@/LineupBoard';
+import { LineupDiscussion } from '@/LineupDiscussion';
 import { MatchTimerCard, timerOf, type MatchTimerFields } from '@/MatchTimerCard';
 
 interface Nomination {
@@ -777,6 +778,9 @@ export default function MatchLiveScreen() {
         title={`${match.event.team?.name ?? 'FKKNV'} – ${match.opponent}`}
         onSaved={() => void load()}
       />
+      {me && (me.roles?.some((r) => ['ADMIN', 'MANAGER', 'COACH'].includes(r.role)) ?? false) && (
+        <LineupDiscussion matchId={match.id} meId={me.id} isStaff={me.roles.some((r) => r.role === 'ADMIN' || r.role === 'MANAGER')} />
+      )}
 
       <Text style={styles.sectionTitle}>Priebeh zápasu</Text>
       {match.events.length === 0 && <Text style={styles.empty}>Zatiaľ žiadne udalosti.</Text>}

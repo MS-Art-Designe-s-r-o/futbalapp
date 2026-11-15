@@ -154,6 +154,8 @@ export default function DashboardPage() {
       <RegistrationCards staff={staff} />
       {isPlayer(me) && me?.memberId && <MyPayments memberId={me.memberId} />}
 
+      {canManage(me) && <SharedLineups />}
+
       {staff && <PlayersByGroup />}
 
       <div className="grid gap-6 lg:grid-cols-2">
@@ -214,6 +216,44 @@ function PlayedMatches({ matches }: { matches: PlayedMatch[] }) {
 }
 
 const MONTHS_SK = ['JAN', 'FEB', 'MAR', 'APR', 'MÁJ', 'JÚN', 'JÚL', 'AUG', 'SEP', 'OKT', 'NOV', 'DEC'];
+
+interface SharedLineup {
+  matchId: string;
+  title: string;
+  teamName: string | null;
+  startAt: string;
+  hasLineup: boolean;
+  comments: number;
+}
+
+/** Rozostavenia, ktoré s trénerom zdieľali kolegovia na konzultáciu. */
+function SharedLineups() {
+  const [rows, setRows] = useState<SharedLineup[]>([]);
+  useEffect(() => {
+    api<SharedLineup[]>('/matches/lineups/shared').then(setRows).catch(() => {});
+  }, []);
+  if (rows.length === 0) return null;
+  return (
+    <section>
+      <h2 className="mb-3 font-bold text-club-900">Zdieľané rozostavenia na konzultáciu</h2>
+      <ul className="border border-club-100 bg-white">
+        {rows.map((r) => (
+          <li key={r.matchId} className="border-b border-club-100 last:border-b-0">
+            <Link href={`/portal/zapasy/${r.matchId}`} className="flex flex-wrap items-center justify-between gap-2 px-4 py-3 hover:bg-club-50">
+              <span className="font-medium text-club-900">
+                {r.title}
+                {r.teamName && <span className="ml-2 text-xs text-gray-500">{r.teamName}</span>}
+              </span>
+              <span className="text-xs text-gray-500">
+                {formatEventDateTimeSk(new Date(r.startAt))} · {r.comments} komentárov{r.hasLineup ? '' : ' · zostava zatiaľ nie je uložená'}
+              </span>
+            </Link>
+          </li>
+        ))}
+      </ul>
+    </section>
+  );
+}
 
 function EventList({ title, events }: { title: string; events: EventItem[] }) {
   return (

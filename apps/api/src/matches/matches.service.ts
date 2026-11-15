@@ -383,6 +383,165 @@ export class MatchesService {
     return { lineup };
   }
 
+  // --- Zdieľanie rozostavenia a diskusia trénerov -------------------------
+
+  /** Účastník diskusie: vedenie, tréner družstva zápasu alebo tréner, s ktorým je rozostavenie zdieľané. */
+  private async lineupAccess(matchId: string, user: AuthUser) {
+    const match = await this.prisma.match.findUnique({
+      where: { id: matchId },
+      select: { event: { select: { teamId: true, isDemo: true, title: true } } },
+    });
+    if (!match || match.event.isDemo !== !!user.isDemo) throw new NotFoundException('Zápas neexistuje');
+    const owner = isStaff(user) || coachTeamIds(user).includes(match.event.teamId ?? '');
+    const shared = owner
+      ? true
+      : !!(await this.prisma.matchLineupShare.findUnique({ where: { matchId_userId: { matchId, userId: user.id } } }));
+    return { owner, participant: owner || shared, title: match.event.title };
+  }
+
+  /** Zápasy, ktorých rozostavenie je zdieľané s daným trénerom. */
+  async sharedLineups(user: AuthUser) {
+    const rows = await this.prisma.matchLineupShare.findMany({
+      where: { userId: user.id },
+      include: {
+        match: {
+          select: {
+            id: true,
+            opponent: true,
+            lineup: true,
+            event: { select: { title: true, startAt: true, isDemo: true, team: { select: { name: true } } } },
+            _count: { select: { lineupComments: true } },
+          },
+        },
+      },
+      orderBy: { createdAt: 'desc' },
+      take: 30,
+    });
+    return rows
+      .filter((r) => r.match.event.isDemo === !!user.isDemo)
+      .map((r) => ({
+        matchId: r.match.id,
+        title: r.match.event.title,
+        teamName: r.match.event.team?.name ?? null,
+        startAt: r.match.event.startAt,
+        hasLineup: !!r.match.lineup,
+        comments: r.match._count.lineupComments,
+      }));
+  }
+
+  /** Zdieľanie, komentáre a (pre majiteľa) zoznam trénerov, s ktorými možno zdieľať. */
+  async lineupDiscussion(matchId: string, user: AuthUser) {
+    const access = await this.lineupAccess(matchId, user);
+    if (!access.participant) return { participant: false, owner: false, shares: [], comments: [], candidates: [] };
+    const [shares, comments] = await Promise.all([
+      this.prisma.matchLineupShare.findMany({
+        where: { matchId },
+        include: { user: { select: { id: true, firstName: true, lastName: true } } },
+        orderBy: { createdAt: 'asc' },
+      }),
+      this.prisma.matchLineupComment.findMany({
+        where: { matchId },
+        include: { author: { select: { id: true, firstName: true, lastName: true } } },
+        orderBy: { createdAt: 'asc' },
+      }),
+    ]);
+    let candidates: Array<{ id: string; firstName: string; lastName: string; teams: string[] }> = [];
+    if (access.owner) {
+      const coaches = await this.prisma.user.findMany({
+        where: { isDemo: !!user.isDemo, id: { not: user.id }, roles: { some: { role: 'COACH' as never } } },
+        select: {
+          id: true,
+          firstName: true,
+          lastName: true,
+          roles: { where: { role: 'COACH' as never }, select: { team: { select: { name: true } } } },
+        },
+        orderBy: [{ lastName: 'asc' }, { firstName: 'asc' }],
+      });
+      candidates = coaches.map((c) => ({
+        id: c.id,
+        firstName: c.firstName,
+        lastName: c.lastName,
+        teams: c.roles.map((r) => r.team?.name).filter((n): n is string => !!n),
+      }));
+    }
+    return {
+      participant: true,
+      owner: access.owner,
+      shares: shares.map((s) => s.user),
+      comments: comments.map((c) => ({ id: c.id, body: c.body, createdAt: c.createdAt, author: c.author })),
+      candidates,
+    };
+  }
+
+  /** Nastaví zoznam trénerov, s ktorými je rozostavenie zdieľané (tréner družstva / vedenie). */
+  async setLineupShares(matchId: string, userIds: string[], user: AuthUser) {
+    await this.assertMatchTeam(matchId, user);
+    const access = await this.lineupAccess(matchId, user);
+    if (!access.owner) throw new ForbiddenException('Zdieľať môže tréner družstva alebo vedenie');
+    const wanted = [...new Set(userIds)].filter((id) => id !== user.id);
+    const valid = await this.prisma.user.findMany({
+      where: { id: { in: wanted }, isDemo: !!user.isDemo, roles: { some: { role: 'COACH' as never } } },
+      select: { id: true },
+    });
+    const ids = valid.map((v) => v.id);
+    const current = await this.prisma.matchLineupShare.findMany({ where: { matchId }, select: { userId: true } });
+    const have = new Set(current.map((c) => c.userId));
+    const added = ids.filter((id) => !have.has(id));
+    await this.prisma.$transaction([
+      this.prisma.matchLineupShare.deleteMany({ where: { matchId, userId: { notIn: ids } } }),
+      ...added.map((userId) => this.prisma.matchLineupShare.create({ data: { matchId, userId } })),
+    ]);
+    if (added.length) {
+      const me = await this.prisma.user.findUnique({ where: { id: user.id }, select: { firstName: true, lastName: true } });
+      await this.pushService
+        .notifyUsers(added, {
+          title: 'Zdieľané rozostavenie',
+          body: `${me?.firstName ?? 'Tréner'} ${me?.lastName ?? ''} s vami zdieľa rozostavenie: ${access.title}`.replace(/\s+/g, ' '),
+          data: { type: 'lineup', matchId },
+        })
+        .catch(() => undefined);
+    }
+    return this.lineupDiscussion(matchId, user);
+  }
+
+  async addLineupComment(matchId: string, bodyRaw: string, user: AuthUser) {
+    const access = await this.lineupAccess(matchId, user);
+    if (!access.participant) throw new ForbiddenException('K tomuto rozostaveniu nemáte prístup');
+    const body = (bodyRaw ?? '').trim();
+    if (!body) throw new BadRequestException('Napíšte komentár');
+    if (body.length > 2000) throw new BadRequestException('Komentár je príliš dlhý (max. 2000 znakov)');
+    await this.prisma.matchLineupComment.create({ data: { matchId, authorId: user.id, body } });
+    // oznám ostatným účastníkom diskusie
+    const [shares, comments] = await Promise.all([
+      this.prisma.matchLineupShare.findMany({ where: { matchId }, select: { userId: true } }),
+      this.prisma.matchLineupComment.findMany({ where: { matchId }, select: { authorId: true } }),
+    ]);
+    const match = await this.prisma.match.findUnique({ where: { id: matchId }, select: { event: { select: { teamId: true } } } });
+    const teamCoaches = match?.event.teamId
+      ? await this.prisma.userRole.findMany({ where: { role: 'COACH' as never, teamId: match.event.teamId }, select: { userId: true } })
+      : [];
+    const recipients = [
+      ...new Set([...shares.map((s) => s.userId), ...comments.map((c) => c.authorId), ...teamCoaches.map((t) => t.userId)]),
+    ].filter((id) => id !== user.id);
+    const me = await this.prisma.user.findUnique({ where: { id: user.id }, select: { firstName: true, lastName: true } });
+    await this.pushService
+      .notifyUsers(recipients, {
+        title: `Rozostavenie: ${access.title}`,
+        body: `${me?.firstName ?? ''} ${me?.lastName ?? ''}: ${body.slice(0, 120)}`.trim(),
+        data: { type: 'lineup-comment', matchId },
+      })
+      .catch(() => undefined);
+    return this.lineupDiscussion(matchId, user);
+  }
+
+  async deleteLineupComment(matchId: string, commentId: string, user: AuthUser) {
+    const c = await this.prisma.matchLineupComment.findUnique({ where: { id: commentId } });
+    if (!c || c.matchId !== matchId) throw new NotFoundException('Komentár neexistuje');
+    if (c.authorId !== user.id && !isStaff(user)) throw new ForbiddenException('Komentár môže zmazať len autor alebo vedenie');
+    await this.prisma.matchLineupComment.delete({ where: { id: commentId } });
+    return this.lineupDiscussion(matchId, user);
+  }
+
   async setState(matchId: string, state: 'PLANNED' | 'LIVE' | 'FINISHED' | 'CANCELLED', user: AuthUser) {
     await this.assertMatchTeam(matchId, user);
     // Skóre sa neprepočítava pri ukončení — môže byť zadané ručne (setScore)

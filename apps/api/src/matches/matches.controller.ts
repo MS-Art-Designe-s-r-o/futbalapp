@@ -74,6 +74,12 @@ export class MatchesController {
     });
   }
 
+  @Get('lineups/shared')
+  @Roles('ADMIN', 'MANAGER', 'COACH')
+  sharedLineups(@CurrentUser() user: AuthUser) {
+    return this.matchesService.sharedLineups(user);
+  }
+
   @Get(':id')
   get(@Param('id') id: string, @CurrentUser() user: AuthUser) {
     return this.matchesService.get(id, user);
@@ -96,6 +102,31 @@ export class MatchesController {
   @Roles('ADMIN', 'MANAGER', 'COACH')
   setLineup(@Param('id') matchId: string, @Body() body: unknown, @CurrentUser() user: AuthUser) {
     return this.matchesService.setLineup(matchId, body, user);
+  }
+
+  /** Zdieľanie rozostavenia s inými trénermi a ich diskusia. */
+  @Get(':id/lineup-discussion')
+  @Roles('ADMIN', 'MANAGER', 'COACH')
+  lineupDiscussion(@Param('id') matchId: string, @CurrentUser() user: AuthUser) {
+    return this.matchesService.lineupDiscussion(matchId, user);
+  }
+
+  @Put(':id/lineup-shares')
+  @Roles('ADMIN', 'MANAGER', 'COACH')
+  setLineupShares(@Param('id') matchId: string, @Body() body: { userIds?: string[] }, @CurrentUser() user: AuthUser) {
+    return this.matchesService.setLineupShares(matchId, Array.isArray(body?.userIds) ? body.userIds : [], user);
+  }
+
+  @Post(':id/lineup-comments')
+  @Roles('ADMIN', 'MANAGER', 'COACH')
+  addLineupComment(@Param('id') matchId: string, @Body() body: { body?: string }, @CurrentUser() user: AuthUser) {
+    return this.matchesService.addLineupComment(matchId, body?.body ?? '', user);
+  }
+
+  @Delete(':id/lineup-comments/:commentId')
+  @Roles('ADMIN', 'MANAGER', 'COACH')
+  deleteLineupComment(@Param('id') matchId: string, @Param('commentId') commentId: string, @CurrentUser() user: AuthUser) {
+    return this.matchesService.deleteLineupComment(matchId, commentId, user);
   }
 
   /** Rozposlať oznam o nominácii e-mailom hráčom/rodičom. */
