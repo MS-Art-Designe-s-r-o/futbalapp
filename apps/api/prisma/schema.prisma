@@ -785,6 +785,8 @@ model Match {
   /// Odkaz na highlighty zo zápasu (strih najlepších momentov).
   highlightsUrl String?
   state       MatchState @default(PLANNED)
+  /// Rozostavenie hráčov na ihrisku: { format, formation, slots: { "<index postu>": memberId } }
+  lineup      Json?
   /// Odkaz na stránku zápasu na sportnete (zadaný ručne, ak zápas nevznikol importom programu)
   sportnetUrl String?
   /// Časomiera: dĺžka polčasu v minútach (nastavuje tréner družstva/admin).

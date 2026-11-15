@@ -10,3 +10,4 @@ export * from './datetime';
 export * from './fitness';
 export * from './public-api';
 export * from './match-timer';
+export * from './lineup';

@@ -7,6 +7,7 @@ import {
   NotFoundException,
   Param,
   Post,
+  Put,
   Query,
   Res,
   UploadedFile,
@@ -88,6 +89,13 @@ export class MatchesController {
   @Roles('ADMIN', 'MANAGER', 'COACH')
   removeNomination(@Param('id') matchId: string, @Param('memberId') memberId: string, @CurrentUser() user: AuthUser) {
     return this.matchesService.removeNomination(matchId, memberId, user);
+  }
+
+  /** Rozostavenie hráčov na ihrisku (null = zmazať). */
+  @Put(':id/lineup')
+  @Roles('ADMIN', 'MANAGER', 'COACH')
+  setLineup(@Param('id') matchId: string, @Body() body: unknown, @CurrentUser() user: AuthUser) {
+    return this.matchesService.setLineup(matchId, body, user);
   }
 
   /** Rozposlať oznam o nominácii e-mailom hráčom/rodičom. */

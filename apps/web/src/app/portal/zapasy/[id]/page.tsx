@@ -11,6 +11,7 @@ import {
   formatEventDateTimeSk,
   formatEventTimeSk,
   type MatchEventType,
+  type MatchLineup,
   type MatchTimerAction,
   type MatchTimerPhase,
   type SurfaceCode,
@@ -23,6 +24,7 @@ import { AddressLink } from '@/components/AddressLink';
 import { MapEmbed } from '@/components/MapEmbed';
 import { EventAdminActions } from '@/components/event-admin-actions';
 import { CrossNomination } from '@/components/cross-nomination';
+import { LineupBoard } from '@/components/lineup-board';
 import { MatchMedia, type MatchPhotoItem, type MatchVideoItem } from '@/components/match-media';
 
 interface Member {
@@ -76,9 +78,10 @@ interface MatchDetail {
     parent?: { id: string; title: string } | null;
     tournamentOrder?: number | null;
     surface: SurfaceCode | null;
-    team: { id: string; name: string } | null;
+    team: { id: string; name: string; teamCategory?: { code: string } } | null;
   };
   nominations: Nomination[];
+  lineup?: MatchLineup | null;
   events: MatchEventRow[];
   photos: MatchPhotoItem[];
   /** Videá nahrané z telefónu (staršie API pole nemusí posielať). */
@@ -927,6 +930,16 @@ export default function MatchPage({ params }: { params: Promise<{ id: string }> 
             </ul>
           )}
         </Card>
+
+        {/* Rozostavenie na ihrisku */}
+        <LineupBoard
+          matchId={match.id}
+          players={match.nominations.map((n) => n.member)}
+          lineup={match.lineup}
+          categoryCode={match.event.team?.teamCategory?.code}
+          manage={manage}
+          onSaved={() => void load()}
+        />
 
         {/* Živý zápis */}
         <Card>

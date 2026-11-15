@@ -1,6 +1,6 @@
 import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
-import { formatEventDateTimeSk, jerseyColorsSchema, resolveJerseys, type MatchEventInput, type MatchTimerAction } from '@fkknv/shared';
-import type { Prisma } from '@prisma/client';
+import { formatEventDateTimeSk, jerseyColorsSchema, matchLineupSchema, resolveJerseys, type MatchEventInput, type MatchTimerAction } from '@fkknv/shared';
+import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { PushService } from '../notifications/push.service';
 import { EmailService } from '../notifications/email.service';
@@ -356,6 +356,31 @@ export class MatchesService {
       where: { matchId_memberId: { matchId, memberId } },
       data: { status: 'REMOVED' },
     });
+  }
+
+  /**
+   * Uloží rozostavenie hráčov na ihrisku (tréner družstva / vedenie).
+   * `null` rozostavenie zmaže. Hráči musia byť v nominácii na zápas.
+   */
+  async setLineup(matchId: string, input: unknown, user: AuthUser) {
+    await this.assertMatchTeam(matchId, user);
+    if (input === null) {
+      await this.prisma.match.update({ where: { id: matchId }, data: { lineup: Prisma.DbNull } });
+      return { lineup: null };
+    }
+    const parsed = matchLineupSchema.safeParse(input);
+    if (!parsed.success) throw new BadRequestException(parsed.error.issues[0]?.message ?? 'Neplatné rozostavenie');
+    const lineup = parsed.data;
+    const nominated = await this.prisma.matchNomination.findMany({
+      where: { matchId, status: { not: 'REMOVED' } },
+      select: { memberId: true },
+    });
+    const ok = new Set(nominated.map((n) => n.memberId));
+    if (Object.values(lineup.slots).some((id) => !ok.has(id))) {
+      throw new BadRequestException('V rozostavení môžu byť len nominovaní hráči');
+    }
+    await this.prisma.match.update({ where: { id: matchId }, data: { lineup } });
+    return { lineup };
   }
 
   async setState(matchId: string, state: 'PLANNED' | 'LIVE' | 'FINISHED' | 'CANCELLED', user: AuthUser) {
