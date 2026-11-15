@@ -86,6 +86,8 @@ export const createMemberSchema = z.object({
   healthNotes: z.string().max(2000).optional(),
   /// sociálny prípad — hráčovi sa nevytvára poplatok (len vedúci)
   socialCase: z.boolean().optional(),
+  /// brankár (doplnková funkcia hráča)
+  isGoalkeeper: z.boolean().optional(),
   /// úroveň trénerskej licencie
   licenseLevel: z.enum(['A_PRO', 'A', 'B', 'C', 'GK']).optional(),
   /// registračný preukaz / futbalnet

@@ -116,6 +116,8 @@ model Member {
   photoUrl       String?
   /// sociálny prípad — hráčovi sa nevytvára členský poplatok (nastaví vedúci)
   socialCase     Boolean      @default(false)
+  /// brankár — doplnková funkcia hráča (štítok/filter, bez zmeny práv)
+  isGoalkeeper   Boolean      @default(false)
   /// úroveň trénerskej licencie: A_PRO | A | B | C | GK (brankár)
   licenseLevel   String?
 

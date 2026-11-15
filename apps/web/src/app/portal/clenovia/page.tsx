@@ -25,6 +25,7 @@ interface MemberRow {
   healthNotes?: string | null;
   photoUrl?: string | null;
   socialCase?: boolean;
+  isGoalkeeper?: boolean;
   licenseLevel?: string | null;
   registrationValidUntil?: string | null;
   homeClub?: string | null;
@@ -111,7 +112,8 @@ function stripDia(s: string): string {
 function memberFunctions(m: MemberRow): string[] {
   const roles = m.user?.roles.map((r) => r.role) ?? [];
   const labels = roles.map((r) => ROLE_LABELS[r] ?? r);
-  if (labels.length === 0 && m.memberships.length > 0) return ['Hráč'];
+  if (labels.length === 0 && m.memberships.length > 0) labels.push('Hráč');
+  if (m.isGoalkeeper) labels.push('Brankár');
   return labels.length ? labels : ['—'];
 }
 
@@ -147,7 +149,7 @@ function MembersTable() {
       const parts: string[] = [];
       if (categoryParam) parts.push(`category=${categoryParam}`);
       if (teamFilter) parts.push(`team=${teamFilter}`);
-      if (roleFilter) parts.push(`role=${roleFilter}`);
+      if (roleFilter && roleFilter !== 'GK') parts.push(`role=${roleFilter}`);
       if (hideInactive) parts.push('hideInactive=true');
       const q = parts.length ? `?${parts.join('&')}` : '';
       setMembers(await api<MemberRow[]>(`/members${q}`));
@@ -159,9 +161,10 @@ function MembersTable() {
 
   // klientské vyhľadávanie podľa priezviska (bez ohľadu na diakritiku/veľkosť písmen)
   const searchNorm = stripDia(search).trim();
+  const byRole = roleFilter === 'GK' ? members.filter((m) => m.isGoalkeeper) : members;
   const filteredMembers = searchNorm
-    ? members.filter((m) => stripDia(m.lastName).includes(searchNorm))
-    : members;
+    ? byRole.filter((m) => stripDia(m.lastName).includes(searchNorm))
+    : byRole;
 
   // klientské zoradenie (priezvisko / družstvo / platnosť preukazu)
   const sortedMembers = [...filteredMembers].sort((a, b) => {
@@ -303,6 +306,7 @@ function MembersTable() {
             <select value={roleFilter} onChange={(e) => setRoleFilter(e.target.value)} className="rounded-md border border-gray-300 px-2 py-1 text-sm">
               <option value="">Všetky</option>
               <option value="PLAYER">Hráč</option>
+              <option value="GK">Brankár</option>
               <option value="PARENT">Rodič</option>
               <option value="COACH">Tréner</option>
               <option value="MANAGER">Vedúci klubu</option>
@@ -682,6 +686,7 @@ function MemberModal({
     member?.registrationValidUntil?.slice(0, 10) ?? '',
   );
   const [socialCase, setSocialCase] = useState(member?.socialCase ?? false);
+  const [isGoalkeeper, setIsGoalkeeper] = useState(member?.isGoalkeeper ?? false);
   const [licenseLevel, setLicenseLevel] = useState(member?.licenseLevel ?? '');
   const [healthNotes, setHealthNotes] = useState(member?.healthNotes ?? '');
   const [teamIds, setTeamIds] = useState<string[]>(() => {
@@ -817,6 +822,7 @@ function MemberModal({
       registrationNumber: registrationNumber || undefined,
       registrationValidUntil: registrationValidUntil || undefined,
       socialCase,
+      isGoalkeeper,
       licenseLevel: licenseLevel || undefined,
       healthNotes: healthNotes || undefined,
       homeClub: homeClub || undefined,
@@ -1068,6 +1074,17 @@ function MemberModal({
                 {o.label}
               </label>
             ))}
+            <label
+              className={`cursor-pointer rounded-full border px-3 py-1 text-sm ${
+                isGoalkeeper ? 'border-club-600 bg-club-600 text-white' : 'border-gray-300 text-gray-700'
+              }`}
+            >
+              <input type="checkbox" className="hidden" checked={isGoalkeeper} onChange={() => {
+                  if (!isGoalkeeper) setRoles((prev) => (prev.includes('PLAYER') ? prev : [...prev, 'PLAYER']));
+                  setIsGoalkeeper((v) => !v);
+                }} />
+              Brankár
+            </label>
           </div>
         </div>
 
