@@ -176,6 +176,7 @@ export default function EventsPage() {
   const [events, setEvents] = useState<EventItem[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [trainingOpen, setTrainingOpen] = useState(false);
+  const [gkTraining, setGkTraining] = useState(false);
   const [matchOpen, setMatchOpen] = useState(false);
   const [meetingOpen, setMeetingOpen] = useState(false);
   const [nominatedMatchIds, setNominatedMatchIds] = useState<Set<string>>(new Set());
@@ -297,8 +298,11 @@ export default function EventsPage() {
         <h1 className="text-2xl font-bold text-club-900">Kalendár</h1>
         {canManage(me) && (
           <div className="flex flex-wrap gap-2">
-            <Button variant="ghost" onClick={() => setTrainingOpen(true)}>
+            <Button variant="ghost" onClick={() => { setGkTraining(false); setTrainingOpen(true); }}>
               + Tréning
+            </Button>
+            <Button variant="ghost" onClick={() => { setGkTraining(true); setTrainingOpen(true); }}>
+              + Tréning brankárov
             </Button>
             <Button variant="ghost" onClick={() => setMeetingOpen(true)}>
               + Rodičovské
@@ -402,12 +406,16 @@ export default function EventsPage() {
         onPick={(kind) => {
           setInitialDate(dayOpen ?? '');
           setDayOpen(null);
-          if (kind === 'training') setTrainingOpen(true);
+          if (kind === 'training' || kind === 'gk') {
+            setGkTraining(kind === 'gk');
+            setTrainingOpen(true);
+          }
           else setMatchOpen(true);
         }}
       />
       <TrainingModal
         open={trainingOpen}
+        goalkeeper={gkTraining}
         initialDate={initialDate}
         pitches={pitches}
         onClose={() => {
@@ -725,7 +733,7 @@ function DayModal({
   pitches: Pitch[];
   occupancy: Occupancy[];
   onClose: () => void;
-  onPick: (kind: 'training' | 'match') => void;
+  onPick: (kind: 'training' | 'gk' | 'match') => void;
 }) {
   const items = day ? occupancy.filter((o) => o.startAt.slice(0, 10) === day) : [];
   const [y, mo, d] = (day ?? '').split('-');
@@ -766,6 +774,9 @@ function DayModal({
           <Button variant="ghost" onClick={() => onPick('training')}>
             + Tréning
           </Button>
+          <Button variant="ghost" onClick={() => onPick('gk')}>
+            + Tréning brankárov
+          </Button>
           <Button onClick={() => onPick('match')}>+ Zápas</Button>
         </div>
       </div>
@@ -775,6 +786,7 @@ function DayModal({
 
 function TrainingModal({
   open,
+  goalkeeper = false,
   initialDate,
   pitches,
   onClose,
@@ -782,17 +794,22 @@ function TrainingModal({
   onDone,
 }: {
   open: boolean;
+  goalkeeper?: boolean;
   initialDate: string;
   pitches: Pitch[];
   onClose: () => void;
   teams: Team[];
   onDone: () => void;
 }) {
+  const baseTitle = goalkeeper ? 'Tréning brankárov' : 'Tréning';
   const [recurring, setRecurring] = useState(true);
   const [pitchId, setPitchId] = useState('');
   const [teamIds, setTeamIds] = useState<string[]>([]);
   const teamId = teamIds[0] ?? '';
-  const [title, setTitle] = useState('Tréning');
+  const [title, setTitle] = useState(baseTitle);
+  useEffect(() => {
+    if (open) setTitle(baseTitle);
+  }, [open, baseTitle]);
   const [location, setLocation] = useState('');
   const [address, setAddress] = useState('');
   const [weekdays, setWeekdays] = useState<number[]>([2, 5]);
@@ -873,7 +890,7 @@ function TrainingModal({
   }
 
   return (
-    <Modal open={open} onClose={onClose} title="Nový tréning">
+    <Modal open={open} onClose={onClose} title={goalkeeper ? 'Nový tréning brankárov' : 'Nový tréning'}>
       <div className="space-y-4">
         <div className="flex gap-2">
           <Button variant={recurring ? 'primary' : 'ghost'} onClick={() => setRecurring(true)}>
