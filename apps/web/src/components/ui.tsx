@@ -1,6 +1,7 @@
 'use client';
 
 import type { ReactNode } from 'react';
+import { positionShort } from '@fkknv/shared';
 
 export const inputCls =
   'mt-1 w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-club-500 focus:outline-none';
@@ -70,4 +71,15 @@ export function Card({ children, className = '' }: { children: ReactNode; classN
 export function ErrorText({ children }: { children: ReactNode }) {
   if (!children) return null;
   return <p className="text-sm text-red-600">{children}</p>;
+}
+
+/** Malá skratka postavenia hráča (CB, CM…) za menom; nič, ak nie je zadané. */
+export function PlayerPos({ position }: { position?: string | null }) {
+  const short = positionShort(position);
+  if (!short) return null;
+  return (
+    <span className="ml-1 whitespace-nowrap rounded bg-club-100 px-1 py-0.5 align-middle text-[10px] font-semibold text-club-700">
+      {short}
+    </span>
+  );
 }

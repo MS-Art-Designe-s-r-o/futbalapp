@@ -93,7 +93,7 @@ export class MatchSyncService {
       where: { id: matchId },
       include: {
         events: true,
-        nominations: { include: { member: { select: { id: true, firstName: true, lastName: true } } } },
+        nominations: { include: { member: { select: { id: true, firstName: true, lastName: true, position: true } } } },
         event: { include: { team: true } },
       },
     });
@@ -162,7 +162,7 @@ export class MatchSyncService {
     if (match.event.teamId) {
       const memberships = await this.prisma.teamMembership.findMany({
         where: { teamId: match.event.teamId, seasonId: match.event.seasonId, leftAt: null },
-        select: { member: { select: { id: true, firstName: true, lastName: true } } },
+        select: { member: { select: { id: true, firstName: true, lastName: true, position: true } } },
       });
       for (const m of memberships) roster.set(m.member.id, m.member);
     }

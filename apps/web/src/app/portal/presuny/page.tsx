@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { api } from '@/lib/api';
 import { coachTeams, isStaff, useMe } from '@/lib/auth';
-import { Button, Card, ErrorText } from '@/components/ui';
+import { Button, Card, ErrorText, PlayerPos } from '@/components/ui';
 
 interface Team {
   id: string;
@@ -14,6 +14,7 @@ interface PlayerHit {
   id: string;
   firstName: string;
   lastName: string;
+  position?: string | null;
   teams: Array<{ id: string; name: string }>;
 }
 interface PendingTransfer {
@@ -153,6 +154,7 @@ export default function TransfersPage() {
                 <div className="text-sm">
                   <span className="font-medium text-club-900">
                     {p.lastName} {p.firstName}
+                    <PlayerPos position={p.position} />
                   </span>{' '}
                   <span className="text-gray-500">
                     {p.teams.length ? p.teams.map((t) => t.name).join(', ') : 'bez družstva'}

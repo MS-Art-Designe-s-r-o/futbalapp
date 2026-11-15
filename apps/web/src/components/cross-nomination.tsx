@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { formatEventDateTimeSk } from '@fkknv/shared';
 import { api } from '@/lib/api';
 import { isCoach, isStaff, useMe } from '@/lib/auth';
-import { Button, Card, ErrorText, inputCls } from '@/components/ui';
+import { Button, Card, ErrorText, PlayerPos, inputCls } from '@/components/ui';
 
 type RequestStatus = 'PENDING' | 'APPROVED' | 'REJECTED';
 
@@ -13,6 +13,7 @@ interface Candidate {
   id: string;
   firstName: string;
   lastName: string;
+  position?: string | null;
   birthYear: number | null;
   categoryCode: string | null;
   teams: Array<{ id: string; name: string }>;
@@ -270,6 +271,7 @@ export function CrossNomination({ matchId, onChange }: { matchId: string; onChan
                     <span className="min-w-0">
                       <span className="text-club-900">
                         {c.lastName} {c.firstName}
+                        <PlayerPos position={c.position} />
                       </span>
                       <span className="ml-2 text-xs text-gray-500">
                         {[c.birthYear, c.categoryCode, c.teams.map((t) => t.name).join(', ')].filter(Boolean).join(' · ')}

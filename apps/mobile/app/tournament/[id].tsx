@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Alert, Linking, Pressable, RefreshControl, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { formatEventDateTimeSk } from '@fkknv/shared';
+import { formatEventDateTimeSk, positionShort } from '@fkknv/shared';
 import { api } from '@/api';
 import { canManageTeam, fetchMe, type Me } from '@/auth';
 import { ui } from '@/theme';
@@ -35,13 +35,14 @@ interface Tournament {
     jerseyColor?: Jersey | null;
     jerseyColors?: Jersey[];
   }>;
-  nominations: Array<{ memberId: string; firstName: string; lastName: string }>;
+  nominations: Array<{ memberId: string; firstName: string; lastName: string; position?: string | null }>;
 }
 
 interface Candidate {
   id: string;
   firstName: string;
   lastName: string;
+  position?: string | null;
   nominated: boolean;
 }
 
@@ -403,6 +404,7 @@ export default function TournamentScreen() {
       {t.nominations.map((n) => (
         <Text key={n.memberId} style={styles.line}>
           {n.lastName} {n.firstName}
+          {positionShort(n.position) ? `  (${positionShort(n.position)})` : ''}
         </Text>
       ))}
 
@@ -415,6 +417,7 @@ export default function TournamentScreen() {
             <Pressable key={c.id} style={[styles.row, c.nominated && { borderColor: ui.blue }]} onPress={() => toggle(c)}>
               <Text style={styles.line}>
                 {c.lastName} {c.firstName}
+                {positionShort(c.position) ? `  (${positionShort(c.position)})` : ''}
               </Text>
               <Text style={{ color: c.nominated ? ui.lime : ui.muted, fontWeight: '700' }}>{c.nominated ? '✓ v nominácii' : '+'}</Text>
             </Pressable>

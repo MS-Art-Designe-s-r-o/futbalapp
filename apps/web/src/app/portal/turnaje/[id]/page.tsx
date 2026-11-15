@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { formatEventDateTimeSk, formatEventTimeSk, type SurfaceCode } from '@fkknv/shared';
 import { api } from '@/lib/api';
 import { canManageTeam, useMe } from '@/lib/auth';
-import { Button, Card, ErrorText, Modal, inputCls, labelCls } from '@/components/ui';
+import { Button, Card, ErrorText, Modal, PlayerPos, inputCls, labelCls } from '@/components/ui';
 import { AddressLink } from '@/components/AddressLink';
 import { EventAdminActions } from '@/components/event-admin-actions';
 import { ClubPicker, type ClubOption } from '@/components/club-picker';
@@ -33,6 +33,7 @@ interface Candidate {
   id: string;
   firstName: string;
   lastName: string;
+  position?: string | null;
   nominated: boolean;
 }
 interface Tournament {
@@ -49,7 +50,7 @@ interface Tournament {
   };
   participants: Array<{ id: string; clubName: string; logoUrl: string | null; sortOrder: number }>;
   matches: TournamentMatch[];
-  nominations?: Array<{ memberId: string; firstName: string; lastName: string }>;
+  nominations?: Array<{ memberId: string; firstName: string; lastName: string; position?: string | null }>;
 }
 
 const STATE_LABELS: Record<string, string> = {
@@ -375,6 +376,7 @@ export default function TournamentPage({ params }: { params: Promise<{ id: strin
               {nominations.map((n) => (
                 <li key={n.memberId} className="px-2 py-1 text-sm text-club-900">
                   {n.firstName} {n.lastName}
+                  <PlayerPos position={n.position} />
                 </li>
               ))}
             </ul>
@@ -415,6 +417,7 @@ export default function TournamentPage({ params }: { params: Promise<{ id: strin
                   <li key={c.id} className="flex items-center justify-between gap-3 px-4 py-2">
                     <span className="text-sm text-club-900">
                       {c.firstName} {c.lastName}
+                      <PlayerPos position={c.position} />
                       {c.nominated && <span className="ml-2 text-xs font-semibold text-green-700">nominovaný</span>}
                     </span>
                     <Button

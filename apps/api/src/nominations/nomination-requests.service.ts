@@ -107,6 +107,7 @@ export class NominationRequestsService {
         id: true,
         firstName: true,
         lastName: true,
+        position: true,
         birthDate: true,
         memberships: {
           where: { leftAt: null, season: { isActive: true } },
@@ -152,6 +153,7 @@ export class NominationRequestsService {
           id: p.id,
           firstName: p.firstName,
           lastName: p.lastName,
+          position: p.position,
           birthYear: p.birthDate ? p.birthDate.getUTCFullYear() : null,
           categoryCode: code,
           order,
@@ -246,7 +248,7 @@ export class NominationRequestsService {
   /** Žiadosti, o ktorých môže používateľ rozhodnúť, a žiadosti, ktoré sám podal. */
   async list(user: AuthUser, matchId?: string) {
     const include = {
-      member: { select: { id: true, firstName: true, lastName: true } },
+      member: { select: { id: true, firstName: true, lastName: true, position: true } },
       requestedBy: { select: { firstName: true, lastName: true } },
       decidedBy: { select: { firstName: true, lastName: true } },
       match: {

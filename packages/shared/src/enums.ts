@@ -19,21 +19,38 @@ export const EVENT_TYPE_LABELS_SK: Record<EventType, string> = {
   PARENT_MEETING: 'Rodičovské združenie',
 };
 
-/** Postavenie hráča na ihrisku. */
-export const PLAYER_POSITIONS = ['GK', 'RB', 'LB', 'CB', 'CDM', 'CM', 'CAM', 'RW', 'LW', 'ST'] as const;
+/** Postavenie hráča na ihrisku (kód → názov a skratka). */
+export const PLAYER_POSITIONS = ['CB', 'FB', 'WB', 'CDM', 'CM', 'CAM', 'WM', 'ST', 'W', 'SS'] as const;
 export type PlayerPosition = (typeof PLAYER_POSITIONS)[number];
 export const PLAYER_POSITION_LABELS_SK: Record<PlayerPosition, string> = {
-  GK: 'Brankár (GK)',
-  RB: 'Pravý obranca (RB)',
-  LB: 'Ľavý obranca (LB)',
   CB: 'Stredný obranca / Stopér (CB)',
-  CDM: 'Defenzívny stredopoliar (CDM)',
-  CM: 'Stredopoliar (CM)',
-  CAM: 'Ofenzívny stredopoliar (CAM)',
-  RW: 'Pravý krídelník (RW)',
-  LW: 'Ľavý krídelník (LW)',
-  ST: 'Útočník (ST)',
+  FB: 'Krajný obranca (LB / RB)',
+  WB: 'Krídelný obranca / Wing-back (LWB / RWB)',
+  CDM: 'Defenzívny stredopoliar / Štít (CDM)',
+  CM: 'Stredný stredopoliar (CM)',
+  CAM: 'Ofenzívny stredopoliar / Tvorca hry (CAM)',
+  WM: 'Krajný stredopoliar (LM / RM)',
+  ST: 'Stredný útočník / Hrotový útočník (ST / CF)',
+  W: 'Krídelný útočník / Krídlo (LW / RW)',
+  SS: 'Podhrotový útočník (SS)',
 };
+/** Krátka skratka postavenia (zobrazuje sa pri mene hráča). */
+export const PLAYER_POSITION_SHORT: Record<PlayerPosition, string> = {
+  CB: 'CB',
+  FB: 'LB/RB',
+  WB: 'LWB/RWB',
+  CDM: 'CDM',
+  CM: 'CM',
+  CAM: 'CAM',
+  WM: 'LM/RM',
+  ST: 'ST/CF',
+  W: 'LW/RW',
+  SS: 'SS',
+};
+/** Skratka postavenia pre zobrazenie pri mene ('' ak nie je zadané/neznáme). */
+export function positionShort(code: string | null | undefined): string {
+  return code ? (PLAYER_POSITION_SHORT as Record<string, string>)[code] ?? '' : '';
+}
 
 /** Označenie priateľského zápasu (Match.isFriendly) — napr. namiesto súťaže. */
 export const FRIENDLY_MATCH_LABEL_SK = 'Priateľský zápas';

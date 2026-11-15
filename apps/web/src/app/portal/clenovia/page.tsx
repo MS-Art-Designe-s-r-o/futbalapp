@@ -9,7 +9,7 @@ import { categoryColor } from '@/lib/colors';
 import { isAdmin, isStaff, useMe } from '@/lib/auth';
 import { PlayerFitnessPanel } from '@/components/fitness';
 import { MemberAttendancePanel } from '@/components/member-attendance';
-import { Button, Card, ErrorText, Modal, inputCls, labelCls } from '@/components/ui';
+import { Button, Card, ErrorText, Modal, PlayerPos, inputCls, labelCls } from '@/components/ui';
 
 interface Guardian {
   user: { firstName: string; lastName: string; email: string; phone: string | null };
@@ -495,6 +495,7 @@ function MembersTable() {
               <tr key={m.id}>
                 <td className="sticky left-0 z-10 whitespace-nowrap bg-white px-3 py-2 font-medium shadow-[2px_0_4px_-2px_rgba(0,0,0,0.15)]">
                   {m.lastName} {m.firstName}
+                  <PlayerPos position={m.position} />
                 </td>
                 <td className="px-3 py-2">
                   <span className="flex flex-wrap gap-1">

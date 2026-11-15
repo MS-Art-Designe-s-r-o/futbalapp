@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { formatEventDateSk } from '@fkknv/shared';
+import { formatEventDateSk, positionShort } from '@fkknv/shared';
 import { api } from '@/api';
 import { enqueue, flush } from '@/offline';
 import { ui } from '@/theme';
@@ -9,7 +9,7 @@ import { ui } from '@/theme';
 interface AttendanceRow {
   id: string;
   status: string;
-  member: { id: string; firstName: string; lastName: string };
+  member: { id: string; firstName: string; lastName: string; position?: string | null };
 }
 
 interface EventDetail {
@@ -108,6 +108,7 @@ export default function AttendanceScreen() {
           <Pressable style={styles.row} onPress={() => cycleStatus(item)}>
             <Text style={styles.name}>
               {item.member.lastName} {item.member.firstName}
+              {positionShort(item.member.position) ? `  (${positionShort(item.member.position)})` : ''}
             </Text>
             <Text style={[styles.status, { color: statusColors[item.status] ?? ui.muted }]}>
               {statusLabels[item.status] ?? item.status}

@@ -6,7 +6,7 @@ import { api } from '@/lib/api';
 import { formatEventDateTimeSk } from '@fkknv/shared';
 import { categoryColor } from '@/lib/colors';
 import { canManage, coachTeams, isParent, isPlayer, isStaff, useMe } from '@/lib/auth';
-import { Card } from '@/components/ui';
+import { Card, PlayerPos } from '@/components/ui';
 import { AddressLink } from '@/components/AddressLink';
 import { NominationRequestsPanel } from '@/components/cross-nomination';
 
@@ -272,6 +272,7 @@ interface PlayerRow {
   id: string;
   firstName: string;
   lastName: string;
+  position?: string | null;
   memberships: Array<{ team: { name: string; teamCategory: { code: string } } }>;
 }
 interface Group {
@@ -344,6 +345,7 @@ function PlayersByGroup() {
                     .map((p) => (
                       <li key={p.id}>
                         {p.lastName} {p.firstName}
+                        <PlayerPos position={p.position} />
                       </li>
                     ))}
                 </ul>
@@ -359,7 +361,7 @@ function PlayersByGroup() {
 interface Nomination {
   id: string;
   status: string;
-  member: { firstName: string; lastName: string };
+  member: { firstName: string; lastName: string; position?: string | null };
   opponent: string;
   isHome: boolean;
   startAt: string;
@@ -405,6 +407,7 @@ function MatchConfirmations() {
                 </span>
                 <span className="font-medium">
                   {n.member.lastName} {n.member.firstName}
+                  <PlayerPos position={n.member.position} />
                 </span>
                 <span className="ml-2 text-sm text-gray-600">
                   {n.isHome ? 'doma' : 'vonku'} vs {n.opponent} ·{' '}

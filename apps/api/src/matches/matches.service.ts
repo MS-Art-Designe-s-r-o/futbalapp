@@ -47,12 +47,12 @@ export class MatchesService {
         event: { include: { team: { include: { teamCategory: true } }, parent: { select: { id: true, title: true } } } },
         nominations: {
           where: { status: { not: 'REMOVED' } },
-          include: { member: { select: { id: true, firstName: true, lastName: true } } },
+          include: { member: { select: { id: true, firstName: true, lastName: true, position: true } } },
         },
         events: {
           include: {
-            member: { select: { id: true, firstName: true, lastName: true } },
-            relatedMember: { select: { id: true, firstName: true, lastName: true } },
+            member: { select: { id: true, firstName: true, lastName: true, position: true } },
+            relatedMember: { select: { id: true, firstName: true, lastName: true, position: true } },
           },
           orderBy: [{ minute: 'asc' }, { createdAt: 'asc' }],
         },
@@ -185,6 +185,7 @@ export class MatchesService {
                 id: true,
                 firstName: true,
                 lastName: true,
+                position: true,
                 user: { select: { email: true } },
                 guardians: { select: { user: { select: { email: true } } } },
               },
@@ -275,7 +276,7 @@ export class MatchesService {
       select: {
         matchId: true,
         status: true,
-        member: { select: { id: true, firstName: true, lastName: true } },
+        member: { select: { id: true, firstName: true, lastName: true, position: true } },
       },
     });
     return noms.map((n) => ({
@@ -316,7 +317,7 @@ export class MatchesService {
         },
       },
       include: {
-        member: { select: { id: true, firstName: true, lastName: true } },
+        member: { select: { id: true, firstName: true, lastName: true, position: true } },
         match: { include: { event: { include: { team: { include: { teamCategory: true } } } } } },
       },
       orderBy: { match: { event: { startAt: 'asc' } } },

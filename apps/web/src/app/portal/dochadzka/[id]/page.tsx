@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { SURFACE_LABELS_SK, formatEventDateTimeSk, type SurfaceCode } from '@fkknv/shared';
 import { api } from '@/lib/api';
 import { coachTeams, isStaff, useMe } from '@/lib/auth';
-import { Card } from '@/components/ui';
+import { Card, PlayerPos } from '@/components/ui';
 import { AddressLink } from '@/components/AddressLink';
 import { MapEmbed } from '@/components/MapEmbed';
 import { EventAdminActions } from '@/components/event-admin-actions';
@@ -13,7 +13,7 @@ import { EventAdminActions } from '@/components/event-admin-actions';
 interface AttendanceRow {
   id: string;
   status: string;
-  member: { id: string; firstName: string; lastName: string };
+  member: { id: string; firstName: string; lastName: string; position?: string | null };
 }
 interface EventDetail {
   id: string;
@@ -136,6 +136,7 @@ export default function AttendancePage({ params }: { params: Promise<{ id: strin
                 <li key={row.id} className="flex items-center justify-between gap-3 px-4 py-3">
                   <span className="font-medium">
                     {row.member.lastName} {row.member.firstName}
+                    <PlayerPos position={row.member.position} />
                   </span>
                   <div className="flex gap-1">
                     {STATUSES.map((s) => (

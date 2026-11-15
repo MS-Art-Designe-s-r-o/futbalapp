@@ -73,6 +73,7 @@ export class TransfersService {
         id: true,
         firstName: true,
         lastName: true,
+        position: true,
         memberships: {
           where: { seasonId: season.id, leftAt: null },
           select: { team: { select: { id: true, name: true } } },
@@ -85,6 +86,7 @@ export class TransfersService {
       id: m.id,
       firstName: m.firstName,
       lastName: m.lastName,
+      position: m.position,
       teams: m.memberships.map((ms) => ms.team),
     }));
   }

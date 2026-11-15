@@ -18,7 +18,7 @@ import {
 import { JerseyBadges, JerseyPicker } from '@/components/jersey';
 import { api } from '@/lib/api';
 import { coachTeams, isStaff, useMe } from '@/lib/auth';
-import { Button, Card } from '@/components/ui';
+import { Button, Card, PlayerPos } from '@/components/ui';
 import { AddressLink } from '@/components/AddressLink';
 import { MapEmbed } from '@/components/MapEmbed';
 import { EventAdminActions } from '@/components/event-admin-actions';
@@ -29,6 +29,7 @@ interface Member {
   id: string;
   firstName: string;
   lastName: string;
+  position?: string | null;
 }
 interface Nomination {
   id: string;
@@ -879,6 +880,7 @@ export default function MatchPage({ params }: { params: Promise<{ id: string }> 
                     >
                       <span>
                         {m.lastName} {m.firstName}
+                        <PlayerPos position={m.position} />
                       </span>
                       <span className={on ? 'text-club-600' : 'text-gray-400'}>{on ? '✓ v nominácii' : '+ pridať'}</span>
                     </button>
@@ -919,6 +921,7 @@ export default function MatchPage({ params }: { params: Promise<{ id: string }> 
               {match.nominations.map((n) => (
                 <li key={n.id}>
                   {n.member.lastName} {n.member.firstName}
+                  <PlayerPos position={n.member.position} />
                 </li>
               ))}
             </ul>
