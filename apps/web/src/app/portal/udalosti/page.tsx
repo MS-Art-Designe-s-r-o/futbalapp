@@ -1097,10 +1097,10 @@ function MatchModal({
     if (open && initialDate) setDate(initialDate);
   }, [open, initialDate]);
   useEffect(() => {
-    if (open && type === 'TOURNAMENT' && clubs.length === 0) {
+    if (open && clubs.length === 0) {
       api<ClubItem[]>('/clubs').then(setClubs).catch(() => {});
     }
-  }, [open, type, clubs.length]);
+  }, [open, clubs.length]);
 
   async function submit() {
     if (endInvalid) return setError('Koniec musí byť po začiatku');
@@ -1194,7 +1194,30 @@ function MatchModal({
         ) : (
           <div>
             <label className={labelCls}>Súper</label>
-            <input value={opponent} onChange={(e) => setOpponent(e.target.value)} className={inputCls} list="opponent-list" />
+            <input
+              value={opponent}
+              onChange={(e) => setOpponent(e.target.value)}
+              className={inputCls}
+              placeholder="Hľadať v registri klubov alebo napísať názov…"
+            />
+            {(() => {
+              const q = opponent.trim().toLowerCase();
+              const list = clubs.filter((c) => c.name.toLowerCase().includes(q) && c.name !== opponent).slice(0, 50);
+              return list.length > 0 ? (
+                <div className="mt-1 max-h-40 overflow-y-auto rounded-md border border-gray-200 p-1">
+                  {list.map((c) => (
+                    <button
+                      key={c.id}
+                      type="button"
+                      onClick={() => setOpponent(c.name)}
+                      className="block w-full rounded px-2 py-1 text-left text-sm text-gray-700 hover:bg-club-50"
+                    >
+                      {c.name}
+                    </button>
+                  ))}
+                </div>
+              ) : null;
+            })()}
             {type === 'FRIENDLY' && (
               <p className="mt-1 text-xs text-gray-500">
                 Priateľský zápas nie je súčasťou SFZ – synchronizácia s futbalnetom ho neovplyvní.
