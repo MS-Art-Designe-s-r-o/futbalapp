@@ -96,7 +96,7 @@ describe('mužstvá', () => {
     ]);
     const res = await service.teams();
     const arg = prisma.team.findMany.mock.calls[0]![0];
-    expect(arg.where).toEqual({ isDemo: false });
+    expect(arg.where).toEqual({ isDemo: false, isGoalkeeperGroup: false });
     expect(arg.orderBy).toEqual([{ teamCategory: { sortOrder: 'asc' } }, { sortOrder: 'asc' }]);
     const mw = arg.select._count.select.memberships.where;
     expect(mw.seasonId).toBe('s-db');
@@ -120,7 +120,7 @@ describe('súpiska', () => {
   it('demo družstvo → 404', async () => {
     prisma.team.findFirst.mockResolvedValue(null);
     await expect(service.squad('demo')).rejects.toBeInstanceOf(NotFoundException);
-    expect(prisma.team.findFirst.mock.calls[0]![0].where).toEqual({ id: 'demo', isDemo: false });
+    expect(prisma.team.findFirst.mock.calls[0]![0].where).toEqual({ id: 'demo', isDemo: false, isGoalkeeperGroup: false });
   });
 
   it('dotaz vyžaduje súhlas, ACTIVE, nie demo; select bez citlivých polí', async () => {
@@ -183,7 +183,7 @@ describe('udalosti', () => {
       isDemo: false,
       seasonId: 's-db',
       teamId: { not: null },
-      team: { isDemo: false },
+      team: { isDemo: false, isGoalkeeperGroup: false },
       OR: [{ type: { in: ['MATCH', 'TOURNAMENT'] } }, { type: 'TRAINING', isPublic: true }],
     });
     expect(arg.take).toBe(200);
