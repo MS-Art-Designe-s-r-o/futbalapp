@@ -677,7 +677,7 @@ export default function MatchPage({ params }: { params: Promise<{ id: string }> 
               surface={match.event.surface}
               matchId={match.id}
               matchState={match.state}
-              opponent={match.isFriendly || match.event.friendly ? match.opponent : undefined}
+              opponent={match.isFriendly || match.event.friendly || !match.event.futbalnetId ? match.opponent : undefined}
               onChanged={load}
             />
           </div>
