@@ -153,7 +153,7 @@ export class GoalkeepersService implements OnApplicationBootstrap {
     const haveRoles = new Set(autoRoles.map((r) => `${r.userId}|${r.teamId}`));
     for (const w of wanted) {
       if (haveRoles.has(w)) continue;
-      const [userId, teamId] = w.split('|');
+      const [userId, teamId] = w.split('|') as [string, string];
       await this.prisma.userRole.create({ data: { userId, role: 'COACH', teamId } });
       changed = true;
     }
