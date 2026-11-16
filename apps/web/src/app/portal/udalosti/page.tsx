@@ -494,7 +494,7 @@ function EventList({
         <ul className="divide-y divide-club-100 rounded-lg border border-club-100 bg-white">
           {events.map((e) => {
             const href = eventHref(me, e);
-            const c = eventTypeColor(e.type);
+            const c = e.team ? categoryColor(e.team.teamCategory.code) : eventTypeColor(e.type);
             const audience = audienceLabel(e);
             const isNominated = !!e.match && nominated.has(e.match.id);
             const badges = extraBadges(e, tournamentTitles);
@@ -545,7 +545,7 @@ function EventList({
               </>
             );
             return (
-              <li key={e.id}>
+              <li key={e.id} style={{ borderLeft: `4px solid ${c.text}`, backgroundColor: `color-mix(in srgb, ${c.bg} 40%, transparent)` }}>
                 {href ? (
                   <Link href={href} className="block px-4 py-3 hover:bg-club-50">
                     {body}
@@ -670,7 +670,7 @@ function MonthView({
                       .map((e) => {
                         const href = eventHref(me, e);
                         // zápas: farba podľa kategórie družstva + písomné označenie družstva
-                        const c = e.match && e.team ? categoryColor(e.team.teamCategory.code) : eventTypeColor(e.type);
+                        const c = e.team ? categoryColor(e.team.teamCategory.code) : eventTypeColor(e.type);
                         const time = formatEventTimeSk(e.startAt);
                         const isNominated = !!e.match && nominated.has(e.match.id);
                         // zápas aj tréning: názov družstva (bez medzier) hneď za časom;
