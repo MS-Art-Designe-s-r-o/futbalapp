@@ -124,6 +124,7 @@ interface TeamRow {
   name: string;
   sportnetProgramUrl?: string | null;
   sportnetTeamName?: string | null;
+  logoUrl?: string | null;
 }
 interface Category {
   code: string;
@@ -435,6 +436,10 @@ function TeamChip({
 
   return (
     <span className="inline-flex items-center gap-1 rounded-full bg-club-50 px-2 py-0.5 text-sm text-club-700">
+      {team.logoUrl && (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img src={team.logoUrl} alt="" className="h-5 w-auto" />
+      )}
       {team.name}
       <button
         type="button"

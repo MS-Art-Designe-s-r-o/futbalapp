@@ -62,6 +62,10 @@ export default async function MuzstvoPage({ params, searchParams }: { params: Pa
       <section className="section">
         <div className="roster-header">
           <div>
+            {team.logoUrl && (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={team.logoUrl} alt={`Logo ${team.name}`} height={64} style={{ height: 64, width: 'auto', marginBottom: 8 }} />
+            )}
             <span className="label">SEZÓNA {season.name}</span>
             <h2>{cat.name}</h2>
           </div>

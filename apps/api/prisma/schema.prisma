@@ -377,6 +377,8 @@ model Team {
   /// Základná URL súťaže na sportnet.sme.sk pre zobrazenie tabuľky/programu
   /// v sekcii Tabuľka (per družstvo, aby A a B mohli mať vlastnú súťaž).
   sportnetUrl        String?
+  /// Logo družstva (cesta/URL, napr. /teams/pacinda-academy.jpg)
+  logoUrl            String?
 
   teamCategory TeamCategory     @relation(fields: [teamCategoryId], references: [id])
   memberships  TeamMembership[]

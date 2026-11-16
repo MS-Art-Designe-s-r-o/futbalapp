@@ -102,7 +102,7 @@ export class PublicService {
   }
 
   private toTeamDto(
-    t: { id: string; name: string; sortOrder: number; teamCategory: { code: string; name: string; sortOrder: number } },
+    t: { id: string; name: string; sortOrder: number; logoUrl?: string | null; teamCategory: { code: string; name: string; sortOrder: number } },
     rosterSize: number,
   ): PublicTeamDto {
     return {
@@ -111,6 +111,7 @@ export class PublicService {
       categoryCode: t.teamCategory.code,
       categoryName: t.teamCategory.name,
       sortOrder: t.sortOrder,
+      logoUrl: t.logoUrl ?? null,
       rosterSize,
     };
   }
@@ -126,6 +127,7 @@ export class PublicService {
         id: true,
         name: true,
         sortOrder: true,
+        logoUrl: true,
         teamCategory: { select: TEAM_CATEGORY_SELECT },
         _count: { select: { memberships: { where: this.activeMembershipWhere(season.id, now) } } },
       },
