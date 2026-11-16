@@ -102,7 +102,7 @@ describe('mužstvá', () => {
     expect(mw.seasonId).toBe('s-db');
     expect(mw.member).toEqual({ status: 'ACTIVE', isDemo: false });
     expect(mw.OR).toEqual([{ leftAt: null }, { leftAt: { gt: expect.any(Date) } }]);
-    expect(res.teams[0]).toEqual({ id: 't1', name: 'U10', categoryCode: 'U10', categoryName: 'U10', sortOrder: 0, rosterSize: 12 });
+    expect(res.teams[0]).toEqual({ id: 't1', name: 'U10', categoryCode: 'U10', categoryName: 'U10', sortOrder: 0, logoUrl: null, rosterSize: 12 });
   });
 });
 
