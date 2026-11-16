@@ -1,4 +1,4 @@
-export const ROLES = ['ADMIN', 'MANAGER', 'COACH', 'PLAYER', 'PARENT'] as const;
+export const ROLES = ['ADMIN', 'MANAGER', 'COACH', 'GK_COACH', 'PLAYER', 'PARENT'] as const;
 export type Role = (typeof ROLES)[number];
 
 export const MEMBER_STATUSES = ['ACTIVE', 'INACTIVE', 'GUEST'] as const;

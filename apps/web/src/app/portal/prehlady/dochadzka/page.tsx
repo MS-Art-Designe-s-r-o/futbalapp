@@ -62,7 +62,7 @@ export default function AttendanceReportPage() {
   }, [teams, me]);
 
   useEffect(() => {
-    api<Team[]>('/seasons/teams').then(setTeams).catch(() => {});
+    api<Team[]>('/seasons/teams?withGk=1').then(setTeams).catch(() => {});
   }, []);
   useEffect(() => {
     if (!teamId && availableTeams[0]) setTeamId(availableTeams[0].id);

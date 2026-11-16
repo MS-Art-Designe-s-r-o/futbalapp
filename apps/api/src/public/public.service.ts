@@ -120,7 +120,7 @@ export class PublicService {
     const season = await this.activeSeason();
     const now = new Date();
     const teams = await this.prisma.team.findMany({
-      where: { isDemo: false },
+      where: { isDemo: false, isGoalkeeperGroup: false },
       orderBy: [{ teamCategory: { sortOrder: 'asc' } }, { sortOrder: 'asc' }],
       select: {
         id: true,
@@ -141,7 +141,7 @@ export class PublicService {
     const season = await this.activeSeason();
     const now = new Date();
     const team = await this.prisma.team.findFirst({
-      where: { id: teamId, isDemo: false },
+      where: { id: teamId, isDemo: false, isGoalkeeperGroup: false },
       select: {
         id: true,
         name: true,
@@ -198,7 +198,7 @@ export class PublicService {
       isDemo: false,
       seasonId,
       teamId: { not: null },
-      team: { isDemo: false },
+      team: { isDemo: false, isGoalkeeperGroup: false },
       OR: [{ type: { in: ['MATCH', 'TOURNAMENT'] } }, { type: 'TRAINING', isPublic: true }],
     };
   }

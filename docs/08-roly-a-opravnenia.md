@@ -79,3 +79,9 @@ Navyše **Oznamy klubu** (celoklubové, píše len vedenie) a interné kanály *
 > Poznámka k nasadeniu: táto zmena upravila databázovú schému (družstvá, podkanály).
 > Na skúšobnom prostredí spustite `./quickstart.sh reset && PUBLIC_HOST=<IP> ./quickstart.sh`,
 > aby sa vytvorila nová schéma a seed (družstvá + podkanály).
+
+## Skupiny Brankári a Tréner brankárov
+
+- Ku každému družstvu s aspoň jedným brankárom (člen so zaškrtnutým „Brankár“ alebo postavením GK) vznikne automatická skupina „<družstvo> Brankári“ a spoločná „Brankári (všetci)“. Sú to bežné `Team` záznamy s `isGoalkeeperGroup = true`; členov dopĺňa `GoalkeepersService` (pri zmene člena, presune, importe a v noci), ručne sa nemenia a nezobrazujú sa na verejnom webe, v tabuľke ani pri zápasoch.
+- Rola `GK_COACH` (Tréner brankárov) sa prideľuje vo formulári člena. Služba jej automaticky pridelí trénerský scope (`COACH` + `teamId`) len na neprázdne skupiny Brankári, takže tréner vidí iba tieto skupiny, ich členov, kalendár, dochádzku a komunikáciu. Tréningy môže vytvárať pre jednu skupinu alebo spoločne pre viac skupín.
+- Automatické `COACH` roly na skupinách Brankári sa vo formulári člena neukazujú.

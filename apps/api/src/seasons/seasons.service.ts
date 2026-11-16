@@ -1,10 +1,14 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { categoryForBirthDate, type CategoryRule as SharedRule, type CategoryCode } from '@fkknv/shared';
 import { PrismaService } from '../prisma/prisma.service';
+import { GoalkeepersService } from '../goalkeepers/goalkeepers.service';
 
 @Injectable()
 export class SeasonsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly goalkeepers: GoalkeepersService,
+  ) {}
 
   list() {
     return this.prisma.season.findMany({
@@ -23,14 +27,14 @@ export class SeasonsService {
   categories(isDemo = false) {
     return this.prisma.teamCategory.findMany({
       orderBy: { sortOrder: 'asc' },
-      include: { teams: { where: { isDemo }, orderBy: { sortOrder: 'asc' } } },
+      include: { teams: { where: { isDemo, isGoalkeeperGroup: false }, orderBy: { sortOrder: 'asc' } } },
     });
   }
 
   /** Zoznam všetkých družstiev (na výber v UI). */
-  teams(isDemo = false) {
+  teams(isDemo = false, withGk = false) {
     return this.prisma.team.findMany({
-      where: { isDemo },
+      where: { isDemo, ...(withGk ? {} : { isGoalkeeperGroup: false }) },
       include: { teamCategory: { select: { code: true, name: true, sortOrder: true, sportnetUrl: true } } },
       orderBy: [{ teamCategory: { sortOrder: 'asc' } }, { sortOrder: 'asc' }],
     });
@@ -101,7 +105,7 @@ export class SeasonsService {
       where: { id: seasonId },
       include: {
         categoryRules: {
-          include: { teamCategory: { include: { teams: { orderBy: { sortOrder: 'asc' } } } } },
+          include: { teamCategory: { include: { teams: { where: { isGoalkeeperGroup: false }, orderBy: { sortOrder: 'asc' } } } } },
         },
       },
     });
@@ -133,7 +137,7 @@ export class SeasonsService {
         birthDate: { not: null },
         NOT: { user: { roles: { some: { role: { in: ['ADMIN', 'MANAGER', 'COACH', 'PARENT'] as never } } } } },
       },
-      include: { memberships: { where: { seasonId }, include: { team: true } } },
+      include: { memberships: { where: { seasonId, team: { isGoalkeeperGroup: false } }, include: { team: true } } },
     });
 
     const result = { assigned: 0, unchanged: 0, skippedExceptions: 0, unmatched: [] as string[] };
@@ -157,12 +161,13 @@ export class SeasonsService {
         continue;
       }
       // automatické zaradenie: nahraď staré auto-zaradenie predvoleným tímom
-      await this.prisma.teamMembership.deleteMany({ where: { memberId: member.id, seasonId, isException: false } });
+      await this.prisma.teamMembership.deleteMany({ where: { memberId: member.id, seasonId, isException: false, team: { isGoalkeeperGroup: false } } });
       await this.prisma.teamMembership.create({
         data: { memberId: member.id, seasonId, teamId: rule.defaultTeamId },
       });
       result.assigned++;
     }
+    await this.goalkeepers.sync().catch(() => undefined);
     return result;
   }
 

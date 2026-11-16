@@ -55,7 +55,7 @@ export class AuthService {
       roles: user.roles.map((r) => ({
         role: r.role,
         team: r.team
-          ? { id: r.team.id, name: r.team.name, categoryCode: r.team.teamCategory.code }
+          ? { id: r.team.id, name: r.team.name, categoryCode: r.team.teamCategory.code, isGoalkeeperGroup: r.team.isGoalkeeperGroup }
           : null,
       })),
       children: user.guardianOf.map((g) => ({

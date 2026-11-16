@@ -10,6 +10,7 @@ import {
 } from '@fkknv/shared';
 import { PrismaService } from '../prisma/prisma.service';
 import { AccountsService } from '../auth/accounts.service';
+import { GoalkeepersService } from '../goalkeepers/goalkeepers.service';
 import { PushService } from '../notifications/push.service';
 import { IssfService } from '../integrations/issf/issf.service';
 import { parseRosterXlsx, type RosterRow } from './roster-import';
@@ -32,7 +33,8 @@ const activeMembership = {
 } as const;
 
 const accountInclude = {
-  user: { select: { id: true, email: true, roles: { select: { role: true, teamId: true } } } },
+  // automatické COACH roly na skupinách brankárov sa v zozname/formulári neukazujú
+  user: { select: { id: true, email: true, roles: { where: { NOT: { team: { isGoalkeeperGroup: true } } }, select: { role: true, teamId: true } } } },
 } as const;
 
 /** Porovnanie podľa slovenskej abecedy — priezvisko, potom meno (č za c, š za s, ž za z…). */
@@ -98,6 +100,7 @@ export class MembersService {
     private readonly accounts: AccountsService,
     private readonly push: PushService,
     private readonly issf: IssfService,
+    private readonly goalkeepers: GoalkeepersService,
   ) {}
 
   async list(params: {
@@ -141,7 +144,7 @@ export class MembersService {
     if (params.role === 'PLAYER') {
       // hráč = má zaradenie do družstva a jeho konto (ak existuje) nie je vedenie/tréner/rodič
       and.push({ memberships: { some: { leftAt: null, season: { isActive: true } } } });
-      and.push({ NOT: { user: { roles: { some: { role: { in: ['ADMIN', 'MANAGER', 'COACH', 'PARENT'] as never } } } } } });
+      and.push({ NOT: { user: { roles: { some: { role: { in: ['ADMIN', 'MANAGER', 'COACH', 'GK_COACH', 'PARENT'] as never } } } } } });
     } else if (params.role) {
       and.push({ user: { roles: { some: { role: params.role as never } } } });
     }
@@ -172,7 +175,7 @@ export class MembersService {
           select: {
             id: true,
             email: true,
-            roles: { select: { role: true, teamId: true } },
+            roles: { where: { NOT: { team: { isGoalkeeperGroup: true } } }, select: { role: true, teamId: true } },
             // deti, ktoré má rodič (konto) priradené (väzba Guardian)
             guardianOf: {
               include: {
@@ -260,8 +263,9 @@ export class MembersService {
       if (count !== unique.length) throw new BadRequestException('Niektoré družstvo neexistuje');
     }
     // odstráň zaradenia, ktoré už nie sú vo výbere
+    // skupiny brankárov sa plnia automaticky — ručné zaradenie sa ich nedotýka
     await this.prisma.teamMembership.deleteMany({
-      where: { memberId, seasonId: season.id, teamId: { notIn: unique.length ? unique : ['__none__'] } },
+      where: { memberId, seasonId: season.id, teamId: { notIn: unique.length ? unique : ['__none__'] }, team: { isGoalkeeperGroup: false } },
     });
     // pridaj/označ vybrané ako manuálne výnimky
     for (const teamId of unique) {
@@ -305,8 +309,8 @@ export class MembersService {
     // roly, ktoré aktér smie meniť (admin všetky, ostatní bez ADMIN/MANAGER)
     const allowedRoles: Role[] = actorRoles.includes('ADMIN')
       ? ([...ROLES] as Role[])
-      : (['PLAYER', 'PARENT', 'COACH'] as Role[]);
-    const STAFF_ROLES: Role[] = ['COACH', 'MANAGER', 'ADMIN'];
+      : (['PLAYER', 'PARENT', 'COACH', 'GK_COACH'] as Role[]);
+    const STAFF_ROLES: Role[] = ['COACH', 'GK_COACH', 'MANAGER', 'ADMIN'];
     // konto sa vytvára len ak je zadaný e-mail
     if (!input.account?.email) {
       // konto existuje a roly sa menia (aj odobratie) → nastav ich presne
@@ -425,6 +429,7 @@ export class MembersService {
     await this.assignTeamsForRole(member.id, input);
     const account = await this.applyAccount({ ...member, userId: null }, input, actorRoles);
     if (input.childMemberIds?.length) await this.linkChildren(member.id, input.childMemberIds);
+    await this.goalkeepers.sync().catch(() => undefined);
     return { member: await this.get(member.id), account };
   }
 
@@ -459,6 +464,7 @@ export class MembersService {
       actorRoles,
     );
     if (input.childMemberIds?.length) await this.linkChildren(id, input.childMemberIds);
+    await this.goalkeepers.sync().catch(() => undefined);
     return { member: await this.get(id), account };
   }
 
@@ -647,6 +653,7 @@ export class MembersService {
       items.push({ name: `${row.firstName} ${row.lastName}`, action, registrationValidUntil: row.registrationValidUntil, team });
     }
 
+    await this.goalkeepers.sync().catch(() => undefined);
     return { total: rows.length, created, updated, unchanged, items };
   }
 
@@ -848,7 +855,7 @@ export class MembersService {
       where: { isActive: true },
       include: {
         categoryRules: {
-          include: { teamCategory: { include: { teams: { orderBy: { sortOrder: 'asc' } } } } },
+          include: { teamCategory: { include: { teams: { where: { isGoalkeeperGroup: false }, orderBy: { sortOrder: 'asc' } } } } },
         },
       },
     });
@@ -880,7 +887,7 @@ export class MembersService {
     if (!code || !rule || !rule.defaultTeamId) return null;
 
     const memberships = await this.prisma.teamMembership.findMany({
-      where: { memberId, seasonId, leftAt: null },
+      where: { memberId, seasonId, leftAt: null, team: { isGoalkeeperGroup: false } },
       include: { team: true },
     });
     // ak má hráč čo i len jednu manuálnu výnimku (aj viac skupín), nezasahujeme
@@ -892,7 +899,7 @@ export class MembersService {
     if (inCategory) return inCategory.team.name;
 
     // automatické zaradenie: nahraď staré auto-zaradenie predvoleným tímom
-    await this.prisma.teamMembership.deleteMany({ where: { memberId, seasonId, isException: false } });
+    await this.prisma.teamMembership.deleteMany({ where: { memberId, seasonId, isException: false, team: { isGoalkeeperGroup: false } } });
     await this.prisma.teamMembership.create({
       data: { memberId, seasonId, teamId: rule.defaultTeamId },
     });

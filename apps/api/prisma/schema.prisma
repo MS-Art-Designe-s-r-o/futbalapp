@@ -17,6 +17,8 @@ enum Role {
   ADMIN
   MANAGER
   COACH
+  /// Tréner brankárov: vidí len skupiny „Brankári“ (automaticky odvodené z družstiev)
+  GK_COACH
   PLAYER
   PARENT
 }
@@ -370,6 +372,8 @@ model Team {
   sportnetProgramUrl String?
   /// Presný názov tohto družstva na sportnete (napr. "FK Košická Nová Ves B")
   sportnetTeamName   String?
+  /// Automatická skupina „Brankári“ družstva (členov dopĺňa GoalkeepersService, ručne sa nemení)
+  isGoalkeeperGroup  Boolean @default(false)
   /// Základná URL súťaže na sportnet.sme.sk pre zobrazenie tabuľky/programu
   /// v sekcii Tabuľka (per družstvo, aby A a B mohli mať vlastnú súťaž).
   sportnetUrl        String?

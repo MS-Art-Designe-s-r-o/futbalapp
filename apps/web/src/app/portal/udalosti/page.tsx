@@ -25,6 +25,7 @@ interface Team {
   id: string;
   name: string;
   teamCategory: { code: string; name: string; sortOrder: number };
+  isGoalkeeperGroup?: boolean;
 }
 interface Pitch {
   id: string;
@@ -201,6 +202,10 @@ export default function EventsPage() {
     return teams.filter((t) => coachIds.has(t.id));
   }, [teams, me]);
 
+  // bežné družstvá (zápasy, rodičovské) a skupiny Brankári (tréningy brankárov)
+  const regularTeams = useMemo(() => availableTeams.filter((t) => !t.isGoalkeeperGroup), [availableTeams]);
+  const gkTeams = useMemo(() => availableTeams.filter((t) => t.isGoalkeeperGroup), [availableTeams]);
+
   // zapamätané zobrazenie kalendára (Najbližšie/Mesiac) pre daného používateľa
   const viewKey = me ? `fkknv:cal-view:${me.id}` : null;
   useEffect(() => {
@@ -250,7 +255,7 @@ export default function EventsPage() {
   }, [teamFilter, view, month, me]);
 
   useEffect(() => {
-    api<Team[]>('/seasons/teams').then(setTeams).catch(() => {});
+    api<Team[]>('/seasons/teams?withGk=1').then(setTeams).catch(() => {});
     api<string[]>('/events/locations').then(setVenues).catch(() => {});
     api<Pitch[]>('/pitches').then(setPitches).catch(() => {});
     api<Array<{ matchId: string }>>('/matches/my/nominated')
@@ -299,16 +304,22 @@ export default function EventsPage() {
         <h1 className="text-2xl font-bold text-club-900">Kalendár</h1>
         {canManage(me) && (
           <div className="flex flex-wrap gap-2">
-            <Button variant="ghost" onClick={() => { setGkTraining(false); setTrainingOpen(true); }}>
-              + Tréning
-            </Button>
-            <Button variant="ghost" onClick={() => { setGkTraining(true); setTrainingOpen(true); }}>
-              + Tréning brankárov
-            </Button>
-            <Button variant="ghost" onClick={() => setMeetingOpen(true)}>
-              + Rodičovské
-            </Button>
-            <Button onClick={() => setMatchOpen(true)}>+ Zápas / turnaj</Button>
+            {regularTeams.length > 0 && (
+              <Button variant="ghost" onClick={() => { setGkTraining(false); setTrainingOpen(true); }}>
+                + Tréning
+              </Button>
+            )}
+            {gkTeams.length > 0 && (
+              <Button variant="ghost" onClick={() => { setGkTraining(true); setTrainingOpen(true); }}>
+                + Tréning brankárov
+              </Button>
+            )}
+            {regularTeams.length > 0 && (
+              <Button variant="ghost" onClick={() => setMeetingOpen(true)}>
+                + Rodičovské
+              </Button>
+            )}
+            {regularTeams.length > 0 && <Button onClick={() => setMatchOpen(true)}>+ Zápas / turnaj</Button>}
           </div>
         )}
       </div>
@@ -404,6 +415,8 @@ export default function EventsPage() {
         pitches={pitches}
         occupancy={occupancy}
         onClose={() => setDayOpen(null)}
+        showRegular={regularTeams.length > 0}
+        showGk={gkTeams.length > 0}
         onPick={(kind) => {
           setInitialDate(dayOpen ?? '');
           setDayOpen(null);
@@ -423,7 +436,7 @@ export default function EventsPage() {
           setTrainingOpen(false);
           setInitialDate('');
         }}
-        teams={availableTeams}
+        teams={gkTraining ? gkTeams : regularTeams}
         onDone={() => {
           setTrainingOpen(false);
           void load();
@@ -437,7 +450,7 @@ export default function EventsPage() {
           setMatchOpen(false);
           setInitialDate('');
         }}
-        teams={availableTeams}
+        teams={regularTeams}
         onDone={() => {
           setMatchOpen(false);
           void load();
@@ -446,7 +459,7 @@ export default function EventsPage() {
       <ParentMeetingModal
         open={meetingOpen}
         onClose={() => setMeetingOpen(false)}
-        teams={availableTeams}
+        teams={regularTeams}
         canWholeClub={isStaff(me)}
         onDone={() => {
           setMeetingOpen(false);
@@ -729,12 +742,16 @@ function DayModal({
   occupancy,
   onClose,
   onPick,
+  showRegular,
+  showGk,
 }: {
   day: string | null;
   pitches: Pitch[];
   occupancy: Occupancy[];
   onClose: () => void;
   onPick: (kind: 'training' | 'gk' | 'match') => void;
+  showRegular: boolean;
+  showGk: boolean;
 }) {
   const items = day ? occupancy.filter((o) => o.startAt.slice(0, 10) === day) : [];
   const [y, mo, d] = (day ?? '').split('-');
@@ -772,13 +789,17 @@ function DayModal({
           <Button variant="ghost" onClick={onClose}>
             Zavrieť
           </Button>
-          <Button variant="ghost" onClick={() => onPick('training')}>
-            + Tréning
-          </Button>
-          <Button variant="ghost" onClick={() => onPick('gk')}>
-            + Tréning brankárov
-          </Button>
-          <Button onClick={() => onPick('match')}>+ Zápas</Button>
+          {showRegular && (
+            <Button variant="ghost" onClick={() => onPick('training')}>
+              + Tréning
+            </Button>
+          )}
+          {showGk && (
+            <Button variant="ghost" onClick={() => onPick('gk')}>
+              + Tréning brankárov
+            </Button>
+          )}
+          {showRegular && <Button onClick={() => onPick('match')}>+ Zápas</Button>}
         </div>
       </div>
     </Modal>
@@ -825,6 +846,9 @@ function TrainingModal({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  useEffect(() => {
+    if (!open) setTeamIds([]);
+  }, [open]);
   useEffect(() => {
     if (open && teams[0] && teamIds.length === 0) setTeamIds([teams[0].id]);
   }, [open, teams, teamIds]);

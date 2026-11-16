@@ -26,6 +26,7 @@ import { ArticlesModule } from './articles/articles.module';
 import { ClubContentModule } from './club-content/club-content.module';
 import { PitchesModule } from './pitches/pitches.module';
 import { NominationsModule } from './nominations/nominations.module';
+import { GoalkeepersModule } from './goalkeepers/goalkeepers.module';
 import { HealthController } from './health.controller';
 
 @Module({
@@ -45,6 +46,7 @@ import { HealthController } from './health.controller';
     ClubsModule,
     FinanceModule,
     ChatModule,
+    GoalkeepersModule,
     ReportsModule,
     FutbalnetModule,
     CaptchaModule,

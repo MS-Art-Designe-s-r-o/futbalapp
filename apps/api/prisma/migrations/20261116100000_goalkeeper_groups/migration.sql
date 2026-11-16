@@ -1,0 +1,5 @@
+-- AlterEnum
+ALTER TYPE "Role" ADD VALUE IF NOT EXISTS 'GK_COACH';
+
+-- AlterTable
+ALTER TABLE "Team" ADD COLUMN "isGoalkeeperGroup" BOOLEAN NOT NULL DEFAULT false;

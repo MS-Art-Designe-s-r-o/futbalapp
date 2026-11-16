@@ -8,7 +8,7 @@ export interface Me {
   firstName: string;
   lastName: string;
   memberId: string | null;
-  roles: Array<{ role: string; team: { id: string; name: string; categoryCode: string } | null }>;
+  roles: Array<{ role: string; team: { id: string; name: string; categoryCode: string; isGoalkeeperGroup?: boolean } | null }>;
   children: Array<{ id: string; firstName: string; lastName: string }>;
 }
 
@@ -28,6 +28,14 @@ export function isPlayer(me: Me | null): boolean {
   return !!me?.roles.some((r) => r.role === 'PLAYER');
 }
 /** Družstvá, ktoré tréner vedie. */
+/** Tréner brankárov bez trénerstva bežného družstva: vidí len skupiny Brankári. */
+export function isGkCoachOnly(me: Me | null): boolean {
+  if (!me || isStaff(me)) return false;
+  const gk = me.roles.some((r) => r.role === 'GK_COACH');
+  const regular = me.roles.some((r) => r.role === 'COACH' && !(r.team?.isGoalkeeperGroup));
+  return gk && !regular;
+}
+
 export function coachTeams(me: Me | null): Array<{ id: string; name: string; categoryCode: string }> {
   return (me?.roles ?? []).filter((r) => r.role === 'COACH' && r.team).map((r) => r.team!);
 }

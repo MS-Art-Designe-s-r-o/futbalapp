@@ -94,12 +94,14 @@ interface Team {
   id: string;
   name: string;
   teamCategory: { code: string };
+  isGoalkeeperGroup?: boolean;
 }
 
 const ROLE_LABELS: Record<string, string> = {
   PLAYER: 'Hráč',
   PARENT: 'Rodič',
   COACH: 'Tréner',
+  GK_COACH: 'Tréner brankárov',
   MANAGER: 'Vedúci klubu',
   ADMIN: 'Admin',
 };
@@ -191,7 +193,7 @@ function MembersTable() {
   const teamNameById = new Map(teams.map((t) => [t.id, t.name]));
 
   useEffect(() => {
-    api<Team[]>('/seasons/teams').then(setTeams).catch(() => {});
+    api<Team[]>('/seasons/teams?withGk=1').then(setTeams).catch(() => {});
   }, []);
   useEffect(() => {
     void load();
@@ -310,6 +312,7 @@ function MembersTable() {
               <option value="GK">Brankár</option>
               <option value="PARENT">Rodič</option>
               <option value="COACH">Tréner</option>
+              <option value="GK_COACH">Tréner brankárov</option>
               <option value="MANAGER">Vedúci klubu</option>
             </select>
           </div>
@@ -611,7 +614,7 @@ function MembersTable() {
       {(editing || creating) && (
         <MemberModal
           member={editing}
-          teams={teams}
+          teams={teams.filter((t) => !t.isGoalkeeperGroup)}
           canGrantAdmin={isAdmin(me)}
           staff={staff}
           onClose={() => {
@@ -633,6 +636,7 @@ const ROLE_OPTIONS: Array<{ value: string; label: string; adminOnly?: boolean }>
   { value: 'PLAYER', label: 'Hráč' },
   { value: 'PARENT', label: 'Rodič' },
   { value: 'COACH', label: 'Tréner' },
+  { value: 'GK_COACH', label: 'Tréner brankárov' },
   { value: 'MANAGER', label: 'Vedúci klubu', adminOnly: true },
   { value: 'ADMIN', label: 'Admin', adminOnly: true },
 ];
@@ -726,7 +730,7 @@ function MemberModal({
   const isParent = roles.includes('PARENT');
   const isCoach = roles.includes('COACH');
   // tréner/vedúci/admin potrebujú prihlasovacie konto (funkcia sa ukladá na konte)
-  const needsAccount = roles.some((r) => ['COACH', 'MANAGER', 'ADMIN'].includes(r));
+  const needsAccount = roles.some((r) => ['COACH', 'GK_COACH', 'MANAGER', 'ADMIN'].includes(r));
 
   async function onPhotoUpload(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];

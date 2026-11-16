@@ -2,6 +2,7 @@ import { BadRequestException, ForbiddenException, Injectable, Logger, NotFoundEx
 import { PrismaService } from '../prisma/prisma.service';
 import { EmailService } from '../notifications/email.service';
 import { PushService } from '../notifications/push.service';
+import { GoalkeepersService } from '../goalkeepers/goalkeepers.service';
 import { coachTeamIds, isStaff } from '../auth/scope';
 import type { AuthUser } from '../auth/current-user.decorator';
 
@@ -14,6 +15,7 @@ export class TransfersService {
     private readonly prisma: PrismaService,
     private readonly email: EmailService,
     private readonly push: PushService,
+    private readonly goalkeepers: GoalkeepersService,
   ) {}
 
   private async activeSeason() {
@@ -33,13 +35,14 @@ export class TransfersService {
   /** Vykoná presun: MOVE odstráni ostatné družstvá v sezóne, ADD len pridá cieľové. */
   private async applyTransfer(memberId: string, toTeamId: string, mode: TransferMode, seasonId: string) {
     if (mode === 'MOVE') {
-      await this.prisma.teamMembership.deleteMany({ where: { memberId, seasonId, teamId: { not: toTeamId } } });
+      await this.prisma.teamMembership.deleteMany({ where: { memberId, seasonId, teamId: { not: toTeamId }, team: { isGoalkeeperGroup: false } } });
     }
     await this.prisma.teamMembership.upsert({
       where: { memberId_seasonId_teamId: { memberId, seasonId, teamId: toTeamId } },
       create: { memberId, seasonId, teamId: toTeamId, isException: true },
       update: { leftAt: null, isException: true },
     });
+    await this.goalkeepers.sync().catch(() => undefined);
   }
 
   /** Vyhľadá hráčov v klube (na požiadanie o presun). */
@@ -103,6 +106,7 @@ export class TransfersService {
     if (!member) throw new NotFoundException('Hráč neexistuje');
     const toTeam = await this.prisma.team.findUnique({ where: { id: toTeamId } });
     if (!toTeam) throw new NotFoundException('Cieľové družstvo neexistuje');
+    if (toTeam.isGoalkeeperGroup) throw new BadRequestException('Skupina Brankári sa plní automaticky, hráča do nej nemožno presunúť');
 
     if (!isStaff(user) && !coachTeamIds(user).includes(toTeamId)) {
       throw new ForbiddenException('Presun môžete žiadať len do vlastného družstva');

@@ -13,6 +13,7 @@ interface Team {
   id: string;
   name: string;
   teamCategory: { code: string };
+  isGoalkeeperGroup?: boolean;
 }
 
 type Mode = 'training' | 'match' | 'tournament';
@@ -56,7 +57,7 @@ export default function NewEventScreen() {
 
   useEffect(() => {
     fetchMe().then(setMe).catch(() => {});
-    api<Team[]>('/seasons/teams').then(setTeams).catch(() => {});
+    api<Team[]>('/seasons/teams?withGk=1').then(setTeams).catch(() => {});
     api<Club[]>('/clubs').then(setClubs).catch(() => {});
     fetchPitches()
       .then((p) => {
@@ -67,13 +68,15 @@ export default function NewEventScreen() {
   }, []);
 
   const myTeams = useMemo(() => {
-    if (isStaff(me)) return teams;
+    // skupiny Brankári patria len k tréningom; zápasy a turnaje ich nemajú
+    const pool = mode === 'training' ? teams : teams.filter((t) => !t.isGoalkeeperGroup);
+    if (isStaff(me)) return pool;
     const ids = new Set(coachTeams(me).map((t) => t.id));
-    return teams.filter((t) => ids.has(t.id));
-  }, [teams, me]);
+    return pool.filter((t) => ids.has(t.id));
+  }, [teams, me, mode]);
 
   useEffect(() => {
-    if (myTeams[0] && !teamId) setTeamId(myTeams[0].id);
+    if (myTeams[0] && !myTeams.some((t) => t.id === teamId)) setTeamId(myTeams[0].id);
   }, [myTeams, teamId]);
 
   // koniec sa predvyplní podľa predvolenej dĺžky (tréning/zápas podľa kategórie), kým ho používateľ nezmení

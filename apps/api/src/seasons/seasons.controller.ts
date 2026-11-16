@@ -1,4 +1,4 @@
-import { Body, Controller, Delete, Get, Param, Patch, Post } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, Patch, Post, Query } from '@nestjs/common';
 import { createTeamSchema, type CreateTeamInput } from '@fkknv/shared';
 import { SeasonsService } from './seasons.service';
 import { Roles } from '../auth/roles.decorator';
@@ -25,8 +25,8 @@ export class SeasonsController {
   }
 
   @Get('teams')
-  teams(@CurrentUser() user: AuthUser) {
-    return this.seasonsService.teams(user.isDemo);
+  teams(@CurrentUser() user: AuthUser, @Query('withGk') withGk?: string) {
+    return this.seasonsService.teams(user.isDemo, withGk === '1');
   }
 
   @Post('teams')

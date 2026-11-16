@@ -5,11 +5,11 @@ import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { api, getToken, setToken } from '@/lib/api';
-import { canManage, isStaff, useMe } from '@/lib/auth';
+import { canManage, isGkCoachOnly, isStaff, useMe } from '@/lib/auth';
 
 const PUBLIC_SITE_URL = 'https://fkknv.sk';
 
-type Ctx = { staff: boolean; manage: boolean };
+type Ctx = { staff: boolean; manage: boolean; gkOnly?: boolean };
 interface Leaf {
   href: string;
   label: string;
@@ -25,7 +25,7 @@ const navigation: Entry[] = [
     label: 'Klub',
     children: [
       { href: '/portal/clenovia', label: 'Členovia', show: ({ manage }) => manage },
-      { href: '/portal/presuny', label: 'Presuny', show: ({ manage }) => manage },
+      { href: '/portal/presuny', label: 'Presuny', show: ({ manage, gkOnly }) => manage && !gkOnly },
       { href: '/portal/registracie', label: 'Registrácie', show: ({ staff }) => staff },
       { href: '/portal/clanky', label: 'Články', show: ({ staff }) => staff },
       { href: '/portal/obsah', label: 'Obsah webu', show: ({ staff }) => staff },
@@ -37,8 +37,8 @@ const navigation: Entry[] = [
   },
   { kind: 'leaf', href: '/portal/udalosti', label: 'Kalendár', show: () => true },
   { kind: 'leaf', href: '/portal/tabulka', label: 'Tabuľka', show: () => true },
-  { kind: 'leaf', href: '/portal/prehlady', label: 'Štatistiky', show: ({ manage }) => manage },
-  { kind: 'leaf', href: '/portal/ulohy', label: 'Úlohy', show: ({ manage }) => manage },
+  { kind: 'leaf', href: '/portal/prehlady', label: 'Štatistiky', show: ({ manage, gkOnly }) => manage && !gkOnly },
+  { kind: 'leaf', href: '/portal/ulohy', label: 'Úlohy', show: ({ manage, gkOnly }) => manage && !gkOnly },
   { kind: 'leaf', href: '/portal/chat', label: 'Komunikácia', show: () => true },
   { kind: 'leaf', href: '/portal/pomoc', label: 'Pomoc', show: () => true },
 ];
@@ -68,7 +68,7 @@ export default function PortalLayout({ children }: { children: React.ReactNode }
     setOpenGroup(null);
   }, [pathname]);
 
-  const ctx: Ctx = { staff, manage: canManage(me) };
+  const ctx: Ctx = { staff, manage: canManage(me), gkOnly: isGkCoachOnly(me) };
   const isActive = (href: string) => pathname === href || pathname.startsWith(`${href}/`);
 
   const flatCls = (active: boolean) =>
