@@ -3,8 +3,8 @@ import { LINEUP_FORMATS, defaultLineupFormat, matchLineupSchema } from './lineup
 
 describe('lineup', () => {
   it('formát podľa kategórie', () => {
-    expect(defaultLineupFormat('U9')).toBe('5+1');
-    expect(defaultLineupFormat('U11')).toBe('7+1');
+    expect(defaultLineupFormat('U9')).toBe('4+1');
+    expect(defaultLineupFormat('U11')).toBe('6+1');
     expect(defaultLineupFormat('U13')).toBe('8+1');
     expect(defaultLineupFormat('U15')).toBe('10+1');
     expect(defaultLineupFormat(null)).toBe('10+1');
