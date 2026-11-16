@@ -28,6 +28,7 @@ export function EventAdminActions({
   surface,
   matchId,
   matchState,
+  opponent,
   recurrenceGroupId,
   onChanged,
 }: {
@@ -41,6 +42,8 @@ export function EventAdminActions({
   surface?: string | null;
   matchId?: string;
   matchState?: string;
+  /** Súper (zadaj len ak sa dá meniť — priateľský/interný zápas). */
+  opponent?: string;
   recurrenceGroupId?: string | null;
   onChanged: () => void;
 }) {
@@ -54,6 +57,8 @@ export function EventAdminActions({
   const [locationVal, setLocationVal] = useState(location ?? '');
   const [addressVal, setAddressVal] = useState(address ?? '');
   const [surfaceVal, setSurfaceVal] = useState(surface ?? '');
+  const [opponentVal, setOpponentVal] = useState(opponent ?? '');
+  const [clubs, setClubs] = useState<Array<{ id: string; name: string }>>([]);
   const [moveOpen, setMoveOpen] = useState(false);
   const [cancelOpen, setCancelOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
@@ -65,7 +70,10 @@ export function EventAdminActions({
     if (moveOpen && venues.length === 0) {
       api<string[]>('/events/locations').then(setVenues).catch(() => {});
     }
-  }, [moveOpen, venues.length]);
+    if (moveOpen && opponent !== undefined && clubs.length === 0) {
+      api<Array<{ id: string; name: string }>>('/clubs').then(setClubs).catch(() => {});
+    }
+  }, [moveOpen, venues.length, opponent, clubs.length]);
 
   const label = kind === 'match' ? 'zápas' : kind === 'tournament' ? 'turnaj' : 'tréning';
   const canReschedule = kind !== 'match' || matchState === 'PLANNED';
@@ -85,7 +93,14 @@ export function EventAdminActions({
         surface: surfaceVal || undefined,
         address: addressVal.trim() || null,
       };
-      if (titleVal.trim()) body.title = titleVal.trim();
+      let newTitle = titleVal.trim();
+      const oppNew = opponentVal.trim();
+      if (opponent !== undefined && oppNew && oppNew !== opponent) {
+        body.opponent = oppNew;
+        // názov „X vs Súper" sa prepíše na nového súpera
+        if (newTitle && opponent && newTitle.includes(opponent)) newTitle = newTitle.replace(opponent, oppNew);
+      }
+      if (newTitle) body.title = newTitle;
       if (endTime) {
         body.endAt = new Date(Date.parse(`${date}T${endTime}:00Z`)).toISOString();
       } else if (endAt) {
@@ -179,6 +194,35 @@ export function EventAdminActions({
             <div>
               <label className={labelCls}>Názov</label>
               <input value={titleVal} onChange={(e) => setTitleVal(e.target.value)} className={inputCls} />
+            </div>
+          )}
+          {opponent !== undefined && (
+            <div>
+              <label className={labelCls}>Súper</label>
+              <input
+                value={opponentVal}
+                onChange={(e) => setOpponentVal(e.target.value)}
+                className={inputCls}
+                placeholder="Hľadať v registri klubov alebo napísať názov…"
+              />
+              {(() => {
+                const q = opponentVal.trim().toLowerCase();
+                const list = clubs.filter((c) => c.name.toLowerCase().includes(q) && c.name !== opponentVal).slice(0, 50);
+                return list.length > 0 ? (
+                  <div className="mt-1 max-h-40 overflow-y-auto rounded-md border border-gray-200 p-1">
+                    {list.map((c) => (
+                      <button
+                        key={c.id}
+                        type="button"
+                        onClick={() => setOpponentVal(c.name)}
+                        className="block w-full rounded px-2 py-1 text-left text-sm text-gray-700 hover:bg-club-50"
+                      >
+                        {c.name}
+                      </button>
+                    ))}
+                  </div>
+                ) : null;
+              })()}
             </div>
           )}
           <div>

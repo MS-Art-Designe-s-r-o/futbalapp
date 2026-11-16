@@ -495,6 +495,19 @@ export class EventsService {
     if (input.friendly !== undefined && event.type === 'MATCH' && event.source === 'INTERNAL') {
       await this.prisma.match.updateMany({ where: { eventId }, data: { isFriendly: input.friendly } });
     }
+    // zmena súpera — len priateľský/interný zápas (súťažný zápas z futbalnetu sa synchronizuje)
+    const newOpponent = input.opponent?.trim();
+    if (newOpponent && event.type === 'MATCH') {
+      const m = await this.prisma.match.findUnique({ where: { eventId } });
+      if (m && m.opponent !== newOpponent) {
+        if (!(m.isFriendly || event.source === 'INTERNAL')) {
+          throw new BadRequestException('Súpera súťažného zápasu z futbalnetu nemožno meniť');
+        }
+        const opponentLogo = await this.clubs.logoForName(newOpponent);
+        await this.clubs.ensure(newOpponent);
+        await this.prisma.match.update({ where: { eventId }, data: { opponent: newOpponent, opponentLogo } });
+      }
+    }
     // zmena termínu → e-mail dotknutým (chyba pri odosielaní nesmie zhodiť uloženie)
     const time = (d: Date | null) => (d ? d.getTime() : null);
     if (time(event.startAt) !== time(updated.startAt) || time(event.endAt) !== time(updated.endAt)) {
