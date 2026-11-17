@@ -4,6 +4,7 @@ import { useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { api, setToken } from '@/lib/api';
+import PortalGuide from '@/components/portal-guide';
 
 const inputCls = 'mt-1 w-full rounded-md border border-gray-300 px-3 py-2 focus:border-club-500 focus:outline-none';
 
@@ -49,8 +50,12 @@ export default function LoginPage() {
   }
 
   return (
-    <main className="flex min-h-screen items-center justify-center bg-club-50 px-6">
-      <div className="w-full max-w-md rounded-lg border border-club-100 bg-white p-8 shadow-sm">
+    <main className="min-h-screen bg-club-50 px-6 py-10">
+      <div className="mx-auto grid max-w-6xl items-start gap-8 lg:grid-cols-[minmax(0,1fr)_28rem]">
+      <div className="order-2 min-w-0 rounded-lg border border-club-100 bg-white p-6 shadow-sm lg:order-1 lg:p-8">
+        <PortalGuide />
+      </div>
+      <div className="order-1 w-full rounded-lg border border-club-100 bg-white p-8 shadow-sm lg:sticky lg:top-6 lg:order-2">
         <Link href="/" className="text-sm text-club-600 hover:underline">
           ← fkknv.sk
         </Link>
@@ -142,6 +147,7 @@ export default function LoginPage() {
             )}
           </>
         )}
+      </div>
       </div>
     </main>
   );
