@@ -207,9 +207,10 @@ export function EventAdminActions({
               />
               {(() => {
                 const q = opponentVal.trim().toLowerCase();
-                const list = clubs.filter((c) => c.name.toLowerCase().includes(q) && c.name !== opponentVal).slice(0, 50);
+                const norm = (s: string) => s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+              const list = clubs.filter((c) => norm(c.name).includes(norm(q)) && c.name !== opponentVal);
                 return list.length > 0 ? (
-                  <div className="mt-1 max-h-40 overflow-y-auto rounded-md border border-gray-200 p-1">
+                  <div className="mt-1 max-h-56 overflow-y-auto rounded-md border border-gray-200 p-1">
                     {list.map((c) => (
                       <button
                         key={c.id}
