@@ -1,5 +1,10 @@
-import { Body, Controller, Get, Param, Post } from '@nestjs/common';
-import { registrationRequestSchema, type RegistrationRequestInput } from '@fkknv/shared';
+import { Body, Controller, Get, Param, Post, Query } from '@nestjs/common';
+import {
+  registrationInfoSchema,
+  registrationRequestSchema,
+  type RegistrationInfoInput,
+  type RegistrationRequestInput,
+} from '@fkknv/shared';
 import { RegistrationService } from './registration.service';
 import { CaptchaService } from '../captcha/captcha.service';
 import { Public } from '../auth/public.decorator';
@@ -23,6 +28,35 @@ export class RegistrationController {
   ) {
     this.captcha.assertValid(captcha?.token, captcha?.answer);
     return this.registrationService.submit(body);
+  }
+
+  /** Verejný formulár doplnenia údajov (odkaz z e-mailu) — poradie pred ':id' trasami */
+  @Public()
+  @Get('info/:token')
+  getInfo(@Param('token') token: string) {
+    return this.registrationService.getInfoForm(token);
+  }
+
+  @Public()
+  @Post('info/:token')
+  submitInfo(
+    @Param('token') token: string,
+    @Body(new ZodValidationPipe(registrationInfoSchema)) body: RegistrationInfoInput,
+  ) {
+    this.captcha.assertValid(body.captcha.token, body.captcha.answer);
+    return this.registrationService.submitInfo(token, body);
+  }
+
+  @Get(':id/request-info/preview')
+  @Roles('ADMIN', 'MANAGER')
+  previewRequestInfo(@Param('id') id: string, @Query('message') message?: string) {
+    return this.registrationService.previewInfoRequest(id, message);
+  }
+
+  @Post(':id/request-info')
+  @Roles('ADMIN', 'MANAGER')
+  requestInfo(@Param('id') id: string, @Body() body?: { message?: string }) {
+    return this.registrationService.requestInfo(id, body?.message);
   }
 
   @Get('pending')

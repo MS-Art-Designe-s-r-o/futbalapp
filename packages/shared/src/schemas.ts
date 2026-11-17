@@ -77,6 +77,41 @@ export const registrationRequestSchema = z
   });
 export type RegistrationRequestInput = z.infer<typeof registrationRequestSchema>;
 
+const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
+const optText = z.string().trim().max(120).optional();
+
+/** Doplnenie údajov o dieťati rodičom cez verejný odkaz (dieťa nie je v ISSF). */
+export const registrationInfoSchema = z.object({
+  firstName: z.string().trim().min(2).max(60),
+  lastName: z.string().trim().min(2).max(60),
+  birthDate: z
+    .string()
+    .regex(ISO_DATE, 'Dátum narodenia zadajte v tvare RRRR-MM-DD')
+    .refine((v) => {
+      const d = new Date(`${v}T00:00:00Z`);
+      return !Number.isNaN(d.getTime()) && d.toISOString().slice(0, 10) === v;
+    }, 'Neplatný dátum narodenia')
+    .refine((v) => new Date(`${v}T00:00:00Z`).getTime() <= Date.now(), 'Dátum narodenia nemôže byť v budúcnosti')
+    .refine((v) => {
+      const limit = new Date();
+      limit.setUTCFullYear(limit.getUTCFullYear() - 60);
+      return new Date(`${v}T00:00:00Z`).getTime() >= limit.getTime();
+    }, 'Hráč môže mať najviac 60 rokov'),
+  registrationNumber: z.string().trim().max(120).optional(),
+  motherClub: optText,
+  guestClub: optText,
+  clubAffiliation: optText,
+  teamId: z.string().max(60).optional(),
+  // fotka ako data URL (jpeg/png/webp), max ~3 MB po dekódovaní
+  photoBase64: z
+    .string()
+    .max(4_200_000)
+    .regex(/^data:image\/(jpeg|png|webp);base64,[A-Za-z0-9+/]+=*$/, 'Fotografia musí byť JPEG, PNG alebo WebP')
+    .optional(),
+  captcha: z.object({ token: z.string().min(1), answer: z.string().min(1) }),
+});
+export type RegistrationInfoInput = z.infer<typeof registrationInfoSchema>;
+
 export const createMemberSchema = z.object({
   firstName: z.string().min(2).max(60),
   lastName: z.string().min(2).max(60),

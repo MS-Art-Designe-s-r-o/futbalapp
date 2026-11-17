@@ -1,12 +1,20 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
-import { parseRodneCislo, type RegistrationRequestInput } from '@fkknv/shared';
+import { randomBytes } from 'node:crypto';
+import { BadRequestException, Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { parseRodneCislo, type RegistrationInfoInput, type RegistrationRequestInput } from '@fkknv/shared';
+import { EmailService } from '../notifications/email.service';
+import { PushService } from '../notifications/push.service';
+import { buildInfoRequestEmail } from './info-request-email';
 import { PrismaService } from '../prisma/prisma.service';
 import { SeasonsService } from '../seasons/seasons.service';
 import { AccountsService } from '../auth/accounts.service';
 
 @Injectable()
 export class RegistrationService {
+  private readonly logger = new Logger(RegistrationService.name);
+
   constructor(
+    private readonly email: EmailService,
+    private readonly push: PushService,
     private readonly prisma: PrismaService,
     private readonly seasonsService: SeasonsService,
     private readonly accounts: AccountsService,
@@ -80,11 +88,146 @@ export class RegistrationService {
     return { created: children.length };
   }
 
-  listPending() {
-    return this.prisma.registrationRequest.findMany({
+  async listPending() {
+    const rows = await this.prisma.registrationRequest.findMany({
       where: { status: 'PENDING' },
       orderBy: { createdAt: 'asc' },
     });
+    // infoToken je tajný (len odkaz v e-maile) — nevracia sa
+    return rows.map(({ infoToken: _token, ...r }) => ({ ...r, hasPhoto: !!r.photoDataUrl }));
+  }
+
+  // ---------------------------------------------------------------------
+  // Doplnenie údajov o dieťati rodičom cez verejný odkaz
+  // ---------------------------------------------------------------------
+
+  private infoLink(token: string) {
+    return `https://fkknv.sk/doplnenie-udajov/${token}`;
+  }
+
+  private async loadForInfoRequest(id: string) {
+    const r = await this.prisma.registrationRequest.findUnique({ where: { id } });
+    if (!r) throw new NotFoundException('Prihláška neexistuje');
+    if (r.status !== 'PENDING') throw new BadRequestException('Prihláška už bola spracovaná');
+    const to = r.parentEmail || r.playerEmail || null;
+    if (!to) throw new BadRequestException('Prihláška nemá vyplnený e-mail rodiča ani hráča');
+    const parentName = [r.parentFirstName, r.parentLastName].filter(Boolean).join(' ') || undefined;
+    const childName = [r.childFirstName, r.childLastName].filter(Boolean).join(' ') || undefined;
+    return { r, to, parentName, childName };
+  }
+
+  /** Náhľad e-mailu — nič neodosiela ani nemení. */
+  async previewInfoRequest(id: string, message?: string) {
+    const { to, parentName, childName } = await this.loadForInfoRequest(id);
+    const link = this.infoLink('UKAZKA');
+    const { subject, html } = buildInfoRequestEmail({ parentName, childName, link, message });
+    return { to, subject, html, link };
+  }
+
+  async requestInfo(id: string, message?: string) {
+    const { to, parentName, childName } = await this.loadForInfoRequest(id);
+    const token = randomBytes(32).toString('hex');
+    const now = new Date();
+    await this.prisma.registrationRequest.update({
+      where: { id },
+      data: { infoToken: token, infoRequestedAt: now, infoExpiresAt: new Date(now.getTime() + 14 * 86_400_000) },
+    });
+    const link = this.infoLink(token);
+    const { subject, html } = buildInfoRequestEmail({ parentName, childName, link, message });
+    const res = await this.email.send([to], subject, html, 'info@fkknv.sk');
+    return { sent: res.sent, ...(res.reason ? { reason: res.reason } : {}), to, link };
+  }
+
+  private async findByInfoToken(token: string) {
+    if (!token || token.length < 16) return null;
+    return this.prisma.registrationRequest.findUnique({ where: { infoToken: token } });
+  }
+
+  private async infoTeams() {
+    const teams = await this.prisma.team.findMany({
+      where: { isDemo: false, isGoalkeeperGroup: false },
+      orderBy: [{ teamCategory: { sortOrder: 'asc' } }, { sortOrder: 'asc' }],
+      select: { id: true, name: true, teamCategory: { select: { name: true } } },
+    });
+    return teams.map((t) => ({ id: t.id, name: t.name, categoryName: t.teamCategory.name }));
+  }
+
+  async getInfoForm(token: string) {
+    const r = await this.findByInfoToken(token);
+    if (!r || r.status !== 'PENDING') return { valid: false, teams: [] as Awaited<ReturnType<typeof this.infoTeams>> };
+    if (r.infoExpiresAt && r.infoExpiresAt.getTime() < Date.now()) {
+      return { valid: false, expired: true, teams: [] as Awaited<ReturnType<typeof this.infoTeams>> };
+    }
+    return {
+      valid: true,
+      alreadyReceived: !!r.infoReceivedAt,
+      parentName: [r.parentFirstName, r.parentLastName].filter(Boolean).join(' ') || undefined,
+      childFirstName: r.childFirstName ?? undefined,
+      childLastName: r.childLastName ?? undefined,
+      childBirthDate: r.childBirthDate ? r.childBirthDate.toISOString().slice(0, 10) : undefined,
+      registrationNumber: r.playerRegistrationNumber ?? undefined,
+      motherClub: r.infoMotherClub ?? undefined,
+      guestClub: r.infoGuestClub ?? undefined,
+      clubAffiliation: r.infoClubAffiliation ?? undefined,
+      requestedTeamId: r.requestedTeamId ?? undefined,
+      teams: await this.infoTeams(),
+    };
+  }
+
+  async submitInfo(token: string, input: RegistrationInfoInput) {
+    const r = await this.findByInfoToken(token);
+    if (!r || r.status !== 'PENDING') throw new NotFoundException('Odkaz nie je platný');
+    if (!r.infoExpiresAt || r.infoExpiresAt.getTime() < Date.now()) {
+      throw new BadRequestException('Platnosť odkazu vypršala. Požiadajte klub o nový odkaz.');
+    }
+    if (input.photoBase64) {
+      const b64 = input.photoBase64.slice(input.photoBase64.indexOf(',') + 1);
+      if (Math.floor((b64.length * 3) / 4) > 3 * 1024 * 1024) {
+        throw new BadRequestException('Fotografia je príliš veľká (max 3 MB)');
+      }
+    }
+    let teamId: string | undefined;
+    if (input.teamId) {
+      const team = await this.prisma.team.findFirst({
+        where: { id: input.teamId, isDemo: false, isGoalkeeperGroup: false },
+        select: { id: true },
+      });
+      if (!team) throw new BadRequestException('Vybrané družstvo neexistuje');
+      teamId = team.id;
+    }
+    await this.prisma.registrationRequest.update({
+      where: { id: r.id },
+      data: {
+        childFirstName: input.firstName,
+        childLastName: input.lastName,
+        childBirthDate: new Date(`${input.birthDate}T00:00:00Z`),
+        playerRegistrationNumber: input.registrationNumber || null,
+        infoMotherClub: input.motherClub || null,
+        infoGuestClub: input.guestClub || null,
+        infoClubAffiliation: input.clubAffiliation || null,
+        requestedTeamId: teamId ?? null,
+        ...(input.photoBase64 ? { photoDataUrl: input.photoBase64 } : {}),
+        infoReceivedAt: new Date(),
+      },
+    });
+    await this.notifyInfoReceived(`${input.firstName} ${input.lastName}`);
+    return { ok: true };
+  }
+
+  /** Best-effort: upozorní vedenie, že rodič doplnil údaje. */
+  private async notifyInfoReceived(childName: string) {
+    try {
+      const staff = await this.prisma.user.findMany({
+        where: { roles: { some: { role: { in: ['ADMIN', 'MANAGER'] as never } } } },
+        select: { id: true },
+      });
+      await this.push.notifyUsers(staff.map((u) => u.id), {
+        title: 'Doplnené údaje k registrácii',
+        body: `Rodič doplnil údaje hráča ${childName}.`,
+      });
+    } catch (e) {
+      this.logger.warn(`Notifikácia o doplnených údajoch zlyhala: ${e instanceof Error ? e.message : e}`);
+    }
   }
 
   /**
@@ -173,6 +316,9 @@ export class RegistrationService {
             addressZip: request.addressZip,
             addressCity: request.addressCity,
             healthNotes: request.healthNotes,
+            homeClub: request.infoMotherClub || undefined,
+            guestClub: request.infoGuestClub || undefined,
+            clubAffiliation: request.infoClubAffiliation || undefined,
           },
         });
 
@@ -254,6 +400,20 @@ export class RegistrationService {
     // 4. zaradenie hráča do kategórie podľa veku
     if (player) {
       const activeSeason = await this.prisma.season.findFirst({ where: { isActive: true } });
+      // želaná skupina z doplnených údajov — pred automatickým zaradením, aby ho nechalo na pokoji
+      if (activeSeason && request.requestedTeamId) {
+        try {
+          await this.prisma.teamMembership.upsert({
+            where: {
+              memberId_seasonId_teamId: { memberId: player.id, seasonId: activeSeason.id, teamId: request.requestedTeamId },
+            },
+            create: { memberId: player.id, seasonId: activeSeason.id, teamId: request.requestedTeamId },
+            update: {},
+          });
+        } catch (e) {
+          this.logger.warn(`Zaradenie do želanej skupiny zlyhalo: ${e instanceof Error ? e.message : e}`);
+        }
+      }
       if (activeSeason) await this.seasonsService.assignMemberships(activeSeason.id);
     }
 

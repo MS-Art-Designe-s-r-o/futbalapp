@@ -257,6 +257,16 @@ model RegistrationRequest {
   reviewedAt    DateTime?
   createdMemberId String?
   createdAt     DateTime           @default(now())
+  /// doplnenie údajov o dieťati rodičom cez verejný odkaz (dieťa nie je v ISSF)
+  infoToken          String?   @unique
+  infoRequestedAt    DateTime?
+  infoExpiresAt      DateTime?
+  infoReceivedAt     DateTime?
+  infoMotherClub     String?
+  infoGuestClub      String?
+  infoClubAffiliation String?
+  /// želaná skupina/družstvo (Team.id)
+  requestedTeamId    String?
 }
 
 /// Žiadosť o presun hráča medzi družstvami. Ak ju podá tréner, ktorý nespravuje

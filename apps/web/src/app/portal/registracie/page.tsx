@@ -30,6 +30,25 @@ interface RegRequest {
   consentPhotos: boolean;
   note: string | null;
   createdAt: string;
+  infoRequestedAt?: string | null;
+  infoReceivedAt?: string | null;
+  infoMotherClub?: string | null;
+  infoGuestClub?: string | null;
+  infoClubAffiliation?: string | null;
+  requestedTeamId?: string | null;
+  hasPhoto?: boolean | null;
+}
+
+interface InfoPreview {
+  to: string | null;
+  subject: string;
+  html: string;
+  link: string;
+}
+
+interface TeamLite {
+  id: string;
+  name: string;
 }
 
 interface ApprovedResult {
@@ -150,6 +169,15 @@ export default function RegistrationsPage() {
                   <p className="text-gray-600">{[r.parentEmail, r.parentPhone].filter(Boolean).join(' · ')}</p>
                 )}
                 {r.parentChildrenNote && <p className="text-gray-600">Deti (členovia): {r.parentChildrenNote}</p>}
+                {(r.infoRequestedAt || r.infoReceivedAt) && (
+                  <p className="text-xs">
+                    {r.infoReceivedAt ? (
+                      <span className="rounded bg-green-100 px-1.5 py-0.5 text-green-800">Údaje doplnené</span>
+                    ) : (
+                      <span className="rounded bg-amber-100 px-1.5 py-0.5 text-amber-800">Údaje vyžiadané</span>
+                    )}
+                  </p>
+                )}
                 <p className="text-xs text-gray-400">
                   Fotosúhlas: {r.consentPhotos ? 'áno' : 'nie'} · prijaté{' '}
                   {new Date(r.createdAt).toLocaleDateString('sk-SK')}
@@ -179,6 +207,7 @@ export default function RegistrationsPage() {
         <RegDetailModal
           request={detail}
           busy={busyId === detail.id}
+          onChanged={load}
           onClose={() => setDetail(null)}
           onApprove={(childMemberIds) => decide(detail.id, 'approve', childMemberIds)}
           onReject={() => decide(detail.id, 'reject')}
@@ -248,12 +277,14 @@ function Field({ label, value }: { label: string; value: ReactNode }) {
 function RegDetailModal({
   request,
   busy,
+  onChanged,
   onClose,
   onApprove,
   onReject,
 }: {
   request: RegRequest;
   busy: boolean;
+  onChanged: () => void | Promise<void>;
   onClose: () => void;
   onApprove: (childMemberIds: string[]) => void;
   onReject: () => void;
@@ -261,6 +292,9 @@ function RegDetailModal({
   const [players, setPlayers] = useState<PlayerOption[]>([]);
   const [search, setSearch] = useState('');
   const [selected, setSelected] = useState<string[]>([]);
+  const [teams, setTeams] = useState<TeamLite[]>([]);
+  const [previewOpen, setPreviewOpen] = useState(false);
+  const [requestedAt, setRequestedAt] = useState<string | null>(request.infoRequestedAt ?? null);
 
   const isParentType = request.applicantType === 'PARENT';
   const address = [
@@ -269,6 +303,14 @@ function RegDetailModal({
   ]
     .filter((s) => s.trim().length > 0)
     .join(', ');
+
+  useEffect(() => {
+    if (request.requestedTeamId) {
+      api<TeamLite[]>('/seasons/teams')
+        .then(setTeams)
+        .catch(() => {});
+    }
+  }, [request.requestedTeamId]);
 
   useEffect(() => {
     api<PlayerOption[]>('/members?role=PLAYER')
@@ -341,6 +383,61 @@ function RegDetailModal({
           </dl>
         </section>
 
+        {(request.parentEmail || request.applicantType === 'PARENT' || request.applicantType === 'CHILD') && (
+          <section className="rounded-md border border-club-100 p-3">
+            <h3 className="mb-1 font-semibold text-club-800">Údaje o hráčovi od rodiča</h3>
+            <div className="mb-2 flex flex-wrap gap-2 text-xs">
+              {requestedAt && (
+                <span className="rounded bg-amber-100 px-1.5 py-0.5 text-amber-800">
+                  Údaje vyžiadané {new Date(requestedAt).toLocaleDateString('sk-SK')}
+                </span>
+              )}
+              {request.infoReceivedAt && (
+                <span className="rounded bg-green-100 px-1.5 py-0.5 text-green-800">
+                  Údaje doplnené {new Date(request.infoReceivedAt).toLocaleDateString('sk-SK')}
+                </span>
+              )}
+            </div>
+            {request.infoReceivedAt && (
+              <dl className="mb-3 grid grid-cols-2 gap-x-4 gap-y-2">
+                <Field label="Meno" value={request.childFirstName} />
+                <Field label="Priezvisko" value={request.childLastName} />
+                <Field
+                  label="Dátum narodenia"
+                  value={request.childBirthDate ? new Date(request.childBirthDate).toLocaleDateString('sk-SK') : null}
+                />
+                <Field label="Registračné číslo" value={request.playerRegistrationNumber} />
+                <Field label="Materský klub" value={request.infoMotherClub} />
+                <Field label="Hosťujúci klub" value={request.infoGuestClub} />
+                <Field label="Klubová príslušnosť" value={request.infoClubAffiliation} />
+                <Field
+                  label="Skupina"
+                  value={request.requestedTeamId ? teams.find((t) => t.id === request.requestedTeamId)?.name ?? request.requestedTeamId : null}
+                />
+                <Field label="Fotka" value={request.hasPhoto ? 'áno, prítomná' : 'nie'} />
+              </dl>
+            )}
+            {request.parentEmail ? (
+              <Button variant="ghost" onClick={() => setPreviewOpen(true)} disabled={busy}>
+                {requestedAt ? 'Vyžiadať znova' : 'Vyžiadať údaje od rodiča'}
+              </Button>
+            ) : (
+              <p className="text-xs text-gray-500">Rodič nemá uvedený e-mail.</p>
+            )}
+          </section>
+        )}
+
+        {previewOpen && (
+          <InfoRequestModal
+            requestId={request.id}
+            onClose={() => setPreviewOpen(false)}
+            onSent={() => {
+              setRequestedAt(new Date().toISOString());
+              void onChanged();
+            }}
+          />
+        )}
+
         {/* Priradenie existujúceho člena */}
         <section className="rounded-md border border-club-100 p-3">
           <label className={labelCls}>
@@ -394,6 +491,108 @@ function RegDetailModal({
           <p className="text-right text-xs text-amber-700">Vyberte aspoň jedno dieťa na priradenie.</p>
         )}
       </div>
+    </Modal>
+  );
+}
+
+function InfoRequestModal({
+  requestId,
+  onClose,
+  onSent,
+}: {
+  requestId: string;
+  onClose: () => void;
+  onSent: () => void;
+}) {
+  const [message, setMessage] = useState('');
+  const [preview, setPreview] = useState<InfoPreview | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [sending, setSending] = useState(false);
+  const [result, setResult] = useState<{ sent: boolean; reason?: string; to: string; link: string } | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    const t = setTimeout(() => {
+      const qs = message.trim() ? `?message=${encodeURIComponent(message.trim())}` : '';
+      api<InfoPreview>(`/registration/${requestId}/request-info/preview${qs}`)
+        .then((p) => {
+          if (cancelled) return;
+          setPreview(p);
+          setError(null);
+        })
+        .catch((e) => {
+          if (!cancelled) setError(e instanceof Error ? e.message : 'Náhľad sa nepodarilo načítať');
+        });
+    }, 400);
+    return () => {
+      cancelled = true;
+      clearTimeout(t);
+    };
+  }, [requestId, message]);
+
+  async function send() {
+    setSending(true);
+    setError(null);
+    try {
+      const res = await api<{ sent: boolean; reason?: string; to: string; link: string }>(
+        `/registration/${requestId}/request-info`,
+        { method: 'POST', body: JSON.stringify({ message: message.trim() || undefined }) },
+      );
+      setResult(res);
+      if (res.sent) onSent();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Odoslanie zlyhalo');
+    } finally {
+      setSending(false);
+    }
+  }
+
+  return (
+    <Modal open onClose={onClose} title="Vyžiadať údaje od rodiča" wide>
+      {result ? (
+        <div className="space-y-3 text-sm">
+          {result.sent ? (
+            <p className="text-green-700">E-mail bol odoslaný na {result.to}.</p>
+          ) : (
+            <p className="text-red-600">E-mail sa nepodarilo odoslať{result.reason ? `: ${result.reason}` : ''}.</p>
+          )}
+          <p className="break-all text-gray-600">
+            Odkaz na formulár: <a href={result.link} target="_blank" rel="noreferrer" className="text-club-600 underline">{result.link}</a>
+          </p>
+          <div className="flex justify-end">
+            <Button onClick={onClose}>Zavrieť</Button>
+          </div>
+        </div>
+      ) : (
+        <div className="space-y-3">
+          <ErrorText>{error}</ErrorText>
+          <p className="text-sm text-gray-700">
+            <strong>Komu:</strong> {preview ? preview.to ?? '— (rodič nemá e-mail)' : '…'}
+          </p>
+          <p className="text-sm text-gray-700">
+            <strong>Predmet:</strong> {preview?.subject ?? '…'}
+          </p>
+          <div>
+            <label className={labelCls}>Osobná správa (nepovinné)</label>
+            <textarea value={message} onChange={(e) => setMessage(e.target.value)} rows={3} maxLength={1000} className={inputCls} />
+          </div>
+          <iframe
+            title="Náhľad e-mailu"
+            srcDoc={preview?.html ?? ''}
+            sandbox=""
+            className="w-full border border-gray-200 bg-white"
+            style={{ height: 520 }}
+          />
+          <div className="flex justify-end gap-2">
+            <Button variant="ghost" onClick={onClose} disabled={sending}>
+              Späť
+            </Button>
+            <Button onClick={send} disabled={sending || !preview?.to}>
+              {sending ? 'Odosielam…' : 'Odoslať e-mail'}
+            </Button>
+          </div>
+        </div>
+      )}
     </Modal>
   );
 }
