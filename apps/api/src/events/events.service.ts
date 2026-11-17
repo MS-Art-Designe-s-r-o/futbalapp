@@ -184,13 +184,14 @@ export class EventsService {
     }
     if (clashes.size === 0) return [];
     const list = [...clashes.values()].sort((a, b) => a.startAt.getTime() - b.startAt.getTime());
-    const sharable = opts.shareable && list.every((c) => c.type === 'TRAINING' && c.teamId);
+    // tréning sa dá na obsadenú plochu rezervovať aj napriek prekryvu (aj so zápasom) — po potvrdení
+    const sharable = !!opts.shareable;
     if (!sharable) {
       const c = list[0]!;
       throw new BadRequestException(`Plocha je v tom čase obsadená (${c.title}, ${formatEventDateTimeSk(c.startAt)})`);
     }
     const result: SharedClash[] = list.map((c) => ({
-      teamId: c.teamId!,
+      teamId: c.teamId ?? '',
       teamName: c.team?.name ?? c.title,
       title: c.title,
       startAt: c.startAt,
@@ -222,7 +223,7 @@ export class EventsService {
   ) {
     if (clashes.length === 0) return;
     const newTeams = await this.prisma.team.findMany({ where: { id: { in: newTeamIds } }, select: { name: true } });
-    const teamIds = [...new Set(clashes.map((c) => c.teamId))].filter((id) => !newTeamIds.includes(id));
+    const teamIds = [...new Set(clashes.map((c) => c.teamId))].filter((id) => !!id && !newTeamIds.includes(id));
     if (teamIds.length === 0) return;
     const coaches = await this.prisma.userRole.findMany({
       where: { role: 'COACH', teamId: { in: teamIds } },

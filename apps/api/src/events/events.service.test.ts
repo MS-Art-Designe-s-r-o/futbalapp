@@ -86,9 +86,13 @@ describe('zdieľanie plochy medzi tréningami', () => {
     await expect(service.create({ ...base, type: 'MATCH', allowSharedPitch: true } as never, 'u1')).rejects.toMatchObject({ status: 400 });
   });
 
-  it('tréning cez zápas sa neponúka (400)', async () => {
+  it('tréning cez zápas vyžaduje potvrdenie (409), s allowSharedPitch prejde', async () => {
     const { service, prisma } = make();
     prisma.event.findMany.mockResolvedValue([clash('MATCH')] as never);
-    await expect(service.create({ ...training, allowSharedPitch: true } as never, 'u1')).rejects.toMatchObject({ status: 400 });
+    await expect(service.create(training as never, 'u1')).rejects.toMatchObject({ status: 409 });
+    (prisma as never as { userRole: unknown }).userRole = { findMany: vi.fn(async () => []) };
+    (prisma as never as { team: unknown }).team = { findUnique: vi.fn(async () => null), findMany: vi.fn(async () => []) };
+    await service.create({ ...training, allowSharedPitch: true } as never, 'u1');
+    expect(prisma.event.create).toHaveBeenCalled();
   });
 });
