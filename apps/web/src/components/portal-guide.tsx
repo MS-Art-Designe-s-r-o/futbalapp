@@ -2,6 +2,7 @@
 
 import Link from 'next/link';
 import { useState } from 'react';
+import AppDownload from './app-download';
 
 type Who = 'parent' | 'adult' | 'staff';
 
@@ -129,6 +130,8 @@ export default function PortalGuide() {
           Každý vidí len to, čo sa ho týka: rodič svoje deti, hráč seba, tréner svoje družstvá a vedenie celý klub.
         </p>
       </section>
+
+      <AppDownload />
 
       <p className="border-t border-club-100 pt-4 text-sm">
         Neviete si rady? Napíšte nám na <span className="font-semibold text-club-800">info@fkknv.sk</span> alebo navštívte{' '}
