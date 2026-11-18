@@ -559,10 +559,39 @@ model Expense {
   paidAt            DateTime?
   bankTransactionId String?       @unique
   createdAt         DateTime      @default(now())
+  /// Štruktúra nákladov (voliteľné — voľné výdavky ju nemajú).
+  costItemId        String?
+  /// 'RENT' | 'OTHER' (len pri položkách s hasKinds)
+  kind              String?
+  /// 'YYYY-MM' — obdobie nákladu
+  period            String?
+  /// 'AUTO' | 'MANUAL' — kto spároval s bankovým pohybom
+  matchedBy         String?
 
   bankTransaction BankTransaction? @relation(fields: [bankTransactionId], references: [id], onDelete: SetNull)
+  costItem        CostItem?        @relation(fields: [costItemId], references: [id], onDelete: SetNull)
 
   @@index([status])
+  @@index([costItemId])
+}
+
+model CostGroup {
+  id        String     @id @default(cuid())
+  name      String     @unique
+  sortOrder Int        @default(0)
+  items     CostItem[]
+}
+
+model CostItem {
+  id        String    @id @default(cuid())
+  groupId   String
+  name      String
+  sortOrder Int       @default(0)
+  hasKinds  Boolean   @default(false)
+  group     CostGroup @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  expenses  Expense[]
+
+  @@unique([groupId, name])
 }
 
 /// Naučená väzba platobného účtu (IBAN) na člena — po prvom ručnom spárovaní

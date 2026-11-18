@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { api, apiUpload } from '@/lib/api';
 import { Button, Card, ErrorText, Modal, inputCls, labelCls } from '@/components/ui';
 import PrehladTab from './prehlad';
-import VydavkyTab from './vydavky';
+import NakladyTab from './naklady';
 
 interface Debtor {
   member: {
@@ -31,7 +31,7 @@ interface Category {
   name: string;
 }
 
-type Tab = 'overview' | 'debtors' | 'plans' | 'matching' | 'expenses' | 'bank';
+type Tab = 'overview' | 'debtors' | 'plans' | 'matching' | 'costs' | 'bank';
 
 export default function PaymentsPage() {
   const [tab, setTab] = useState<Tab>('overview');
@@ -45,7 +45,7 @@ export default function PaymentsPage() {
             ['debtors', 'Dlžníci'],
             ['plans', 'Predpisy'],
             ['matching', 'Párovanie platieb'],
-            ['expenses', 'Výdavky'],
+            ['costs', 'Náklady'],
             ['bank', 'Upomienky'],
           ] as [Tab, string][]
         ).map(([key, label]) => (
@@ -61,7 +61,7 @@ export default function PaymentsPage() {
         ))}
       </div>
       {tab === 'overview' && <PrehladTab />}
-      {tab === 'expenses' && <VydavkyTab />}
+      {tab === 'costs' && <NakladyTab />}
       {tab === 'debtors' && <Debtors />}
       {tab === 'plans' && <Plans />}
       {tab === 'matching' && <PaymentMatching />}

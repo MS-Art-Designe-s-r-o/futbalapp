@@ -3,6 +3,7 @@ import type { BankTransaction, Prisma } from '@prisma/client';
 import { generateVariableSymbol, parsePaymentVariableSymbol, paymentVariableSymbol, periodLabel } from '@fkknv/shared';
 import { PrismaService } from '../prisma/prisma.service';
 import { parseBankStatement } from './bank-statement';
+import { aggregateCosts, filterSortDebits, planMatch, validateCostFields } from './cost-helpers';
 import { buildIndex, suggestMemberId } from './name-match';
 
 export interface BankRow {
@@ -567,31 +568,69 @@ export class FinanceService {
   // Výdavky
   // -------------------------------------------------------------------------
 
-  async listExpenses(q: { status?: string; year?: number; month?: number }) {
-    const where: Prisma.ExpenseWhereInput = {};
-    if (q.status === 'PLANNED' || q.status === 'PAID') where.status = q.status;
+  private readonly expenseInclude = {
+    costItem: { select: { id: true, name: true, hasKinds: true, group: { select: { id: true, name: true } } } },
+    bankTransaction: {
+      select: { id: true, date: true, amountCents: true, counterpartyName: true, variableSymbol: true, message: true },
+    },
+  } satisfies Prisma.ExpenseInclude;
+
+  async listExpenses(q: {
+    status?: string;
+    year?: number;
+    month?: number;
+    groupId?: string;
+    itemId?: string;
+    matched?: string;
+  }) {
+    const and: Prisma.ExpenseWhereInput[] = [];
+    if (q.status === 'PLANNED' || q.status === 'PAID') and.push({ status: q.status });
     if (q.year) {
       const range = periodRange(q.year, q.month);
-      where.OR = [
-        { paidAt: range },
-        { paidAt: null, dueDate: range },
-        { paidAt: null, dueDate: null, createdAt: range },
-      ];
+      const periodFilter: Prisma.ExpenseWhereInput = q.month
+        ? { period: `${q.year}-${String(q.month).padStart(2, '0')}` }
+        : { period: { startsWith: `${q.year}-` } };
+      and.push({
+        OR: [
+          periodFilter,
+          { period: null, paidAt: range },
+          { period: null, paidAt: null, dueDate: range },
+          { period: null, paidAt: null, dueDate: null, createdAt: range },
+        ],
+      });
     }
-    const rows = await this.prisma.expense.findMany({ where });
+    if (q.itemId) and.push({ costItemId: q.itemId });
+    else if (q.groupId) and.push({ costItem: { groupId: q.groupId } });
+    if (q.matched === '1') and.push({ bankTransactionId: { not: null } });
+    if (q.matched === '0') and.push({ bankTransactionId: null });
+    const rows = await this.prisma.expense.findMany({ where: { AND: and }, include: this.expenseInclude });
     const eff = (e: { paidAt: Date | null; dueDate: Date | null; createdAt: Date }) =>
       (e.paidAt ?? e.dueDate ?? e.createdAt).getTime();
     return rows.sort((a, b) => eff(b) - eff(a));
   }
 
-  createExpense(input: {
+  private async loadCostItem(costItemId: string | null) {
+    if (!costItemId) return null;
+    const item = await this.prisma.costItem.findUnique({ where: { id: costItemId } });
+    if (!item) throw new BadRequestException('Nákladová položka neexistuje');
+    return item;
+  }
+
+  async createExpense(input: {
     payee: string;
     amountCents: number;
     variableSymbol?: string;
     dueDate?: string;
     iban?: string;
     description?: string;
+    costItemId?: string | null;
+    kind?: 'RENT' | 'OTHER' | null;
+    period?: string | null;
   }) {
+    const costItem = await this.loadCostItem(input.costItemId ?? null);
+    const kind = input.kind ?? null;
+    const period = input.period || null;
+    validateCostFields({ costItem, kind, period, description: input.description ?? null });
     return this.prisma.expense.create({
       data: {
         payee: input.payee,
@@ -600,7 +639,11 @@ export class FinanceService {
         dueDate: input.dueDate ? new Date(input.dueDate) : null,
         iban: input.iban || null,
         description: input.description || null,
+        costItemId: costItem?.id ?? null,
+        kind,
+        period,
       },
+      include: this.expenseInclude,
     });
   }
 
@@ -614,17 +657,29 @@ export class FinanceService {
       iban?: string | null;
       description?: string | null;
       status?: 'PLANNED' | 'PAID';
+      costItemId?: string | null;
+      kind?: 'RENT' | 'OTHER' | null;
+      period?: string | null;
     },
   ) {
     const e = await this.prisma.expense.findUnique({ where: { id } });
     if (!e) throw new NotFoundException('Výdavok neexistuje');
-    const data: Prisma.ExpenseUpdateInput = {
+    const costItemId = input.costItemId !== undefined ? input.costItemId : e.costItemId;
+    const kind = input.kind !== undefined ? input.kind : e.kind;
+    const period = input.period !== undefined ? input.period || null : e.period;
+    const description = input.description !== undefined ? input.description : e.description;
+    const costItem = await this.loadCostItem(costItemId);
+    validateCostFields({ costItem, kind, period, description });
+    const data: Prisma.ExpenseUncheckedUpdateInput = {
       payee: input.payee,
       amountCents: input.amountCents,
       variableSymbol: input.variableSymbol,
       iban: input.iban,
       description: input.description,
       dueDate: input.dueDate === undefined ? undefined : input.dueDate ? new Date(input.dueDate) : null,
+      costItemId: costItem?.id ?? null,
+      kind,
+      period,
     };
     if (input.status === 'PAID' && e.status !== 'PAID') {
       data.status = 'PAID';
@@ -633,7 +688,165 @@ export class FinanceService {
       data.status = 'PLANNED';
       data.paidAt = null;
     }
-    return this.prisma.expense.update({ where: { id }, data });
+    return this.prisma.expense.update({ where: { id }, data, include: this.expenseInclude });
+  }
+
+  // --- Štruktúra nákladov ---------------------------------------------------
+
+  costStructure() {
+    return this.prisma.costGroup
+      .findMany({
+        orderBy: [{ sortOrder: 'asc' }, { name: 'asc' }],
+        select: {
+          id: true,
+          name: true,
+          sortOrder: true,
+          items: {
+            orderBy: [{ sortOrder: 'asc' }, { name: 'asc' }],
+            select: { id: true, name: true, hasKinds: true, sortOrder: true },
+          },
+        },
+      });
+  }
+
+  async createCostGroup(name: string) {
+    const max = await this.prisma.costGroup.aggregate({ _max: { sortOrder: true } });
+    try {
+      return await this.prisma.costGroup.create({
+        data: { name: name.trim(), sortOrder: (max._max.sortOrder ?? 0) + 1 },
+        include: { items: true },
+      });
+    } catch (e) {
+      if ((e as { code?: string }).code === 'P2002') throw new BadRequestException('Skupina s týmto názvom už existuje');
+      throw e;
+    }
+  }
+
+  async updateCostGroup(id: string, input: { name?: string; sortOrder?: number }) {
+    try {
+      return await this.prisma.costGroup.update({
+        where: { id },
+        data: { name: input.name?.trim(), sortOrder: input.sortOrder },
+        include: { items: true },
+      });
+    } catch (e) {
+      const code = (e as { code?: string }).code;
+      if (code === 'P2025') throw new NotFoundException('Skupina neexistuje');
+      if (code === 'P2002') throw new BadRequestException('Skupina s týmto názvom už existuje');
+      throw e;
+    }
+  }
+
+  async deleteCostGroup(id: string) {
+    const g = await this.prisma.costGroup.findUnique({ where: { id } });
+    if (!g) throw new NotFoundException('Skupina neexistuje');
+    const used = await this.prisma.expense.count({ where: { costItem: { groupId: id } } });
+    if (used > 0) throw new BadRequestException('Skupinu nemožno zmazať, jej položky sa používajú v nákladoch');
+    await this.prisma.costGroup.delete({ where: { id } });
+    return { deleted: true };
+  }
+
+  async createCostItem(input: { groupId: string; name: string; hasKinds?: boolean }) {
+    const group = await this.prisma.costGroup.findUnique({ where: { id: input.groupId } });
+    if (!group) throw new NotFoundException('Skupina neexistuje');
+    const max = await this.prisma.costItem.aggregate({ where: { groupId: input.groupId }, _max: { sortOrder: true } });
+    try {
+      return await this.prisma.costItem.create({
+        data: {
+          groupId: input.groupId,
+          name: input.name.trim(),
+          hasKinds: input.hasKinds ?? false,
+          sortOrder: (max._max.sortOrder ?? 0) + 1,
+        },
+        select: { id: true, name: true, hasKinds: true, sortOrder: true, groupId: true },
+      });
+    } catch (e) {
+      if ((e as { code?: string }).code === 'P2002') throw new BadRequestException('Položka s týmto názvom už v skupine existuje');
+      throw e;
+    }
+  }
+
+  async updateCostItem(id: string, input: { name?: string; hasKinds?: boolean; sortOrder?: number }) {
+    try {
+      return await this.prisma.costItem.update({
+        where: { id },
+        data: { name: input.name?.trim(), hasKinds: input.hasKinds, sortOrder: input.sortOrder },
+        select: { id: true, name: true, hasKinds: true, sortOrder: true, groupId: true },
+      });
+    } catch (e) {
+      const code = (e as { code?: string }).code;
+      if (code === 'P2025') throw new NotFoundException('Položka neexistuje');
+      if (code === 'P2002') throw new BadRequestException('Položka s týmto názvom už v skupine existuje');
+      throw e;
+    }
+  }
+
+  async deleteCostItem(id: string) {
+    const item = await this.prisma.costItem.findUnique({ where: { id } });
+    if (!item) throw new NotFoundException('Položka neexistuje');
+    const used = await this.prisma.expense.count({ where: { costItemId: id } });
+    if (used > 0) throw new BadRequestException('Položku nemožno zmazať, používa sa v nákladoch');
+    await this.prisma.costItem.delete({ where: { id } });
+    return { deleted: true };
+  }
+
+  // --- Párovanie nákladov s bankou -----------------------------------------
+
+  /** Odchádzajúce bankové pohyby na ručné párovanie (max. 200). */
+  async listDebits(q: { q?: string; amount?: string; unmatched?: string }) {
+    const amt = q.amount ? Math.abs(Number(q.amount)) : null;
+    const txs = await this.prisma.bankTransaction.findMany({
+      where: {
+        amountCents: { lt: 0 },
+        ...(q.unmatched === '1' ? { OR: [{ expense: null }, { expense: { costItemId: null } }] } : {}),
+      },
+      orderBy: { date: 'desc' },
+      include: { expense: { select: { id: true, costItemId: true } } },
+    });
+    const rows = txs.map((t) => ({
+      id: t.id,
+      date: t.date,
+      amountCents: t.amountCents,
+      counterpartyName: t.counterpartyName,
+      counterpartyIban: t.counterpartyIban,
+      variableSymbol: t.variableSymbol,
+      message: t.message,
+      matchedExpenseId: t.expense?.id ?? null,
+    }));
+    return filterSortDebits(rows, {
+      q: q.q,
+      amountCents: amt != null && Number.isFinite(amt) ? amt : null,
+    }).slice(0, 200);
+  }
+
+  async matchExpense(id: string, bankTransactionId: string, force?: boolean) {
+    const exp = await this.prisma.expense.findUnique({ where: { id } });
+    if (!exp) throw new NotFoundException('Výdavok neexistuje');
+    const tx = await this.prisma.bankTransaction.findUnique({
+      where: { id: bankTransactionId },
+      include: { expense: { select: { id: true, costItemId: true } } },
+    });
+    if (!tx) throw new NotFoundException('Bankový pohyb neexistuje');
+    if (tx.amountCents >= 0) throw new BadRequestException('Pohyb nie je odchádzajúca platba');
+    const { deleteExpenseId } = planMatch(exp, tx, tx.expense, force);
+    return this.prisma.$transaction(async (db) => {
+      if (deleteExpenseId) await db.expense.delete({ where: { id: deleteExpenseId } });
+      return db.expense.update({
+        where: { id },
+        data: { status: 'PAID', paidAt: tx.date, bankTransactionId: tx.id, matchedBy: 'MANUAL' },
+        include: this.expenseInclude,
+      });
+    });
+  }
+
+  async unmatchExpense(id: string) {
+    const exp = await this.prisma.expense.findUnique({ where: { id } });
+    if (!exp) throw new NotFoundException('Výdavok neexistuje');
+    return this.prisma.expense.update({
+      where: { id },
+      data: { status: 'PLANNED', paidAt: null, bankTransactionId: null, matchedBy: null },
+      include: this.expenseInclude,
+    });
   }
 
   async deleteExpense(id: string) {
@@ -667,7 +880,7 @@ export class FinanceService {
         used.add(found.id);
         await this.prisma.expense.update({
           where: { id: found.id },
-          data: { status: 'PAID', paidAt: tx.date, bankTransactionId: tx.id },
+          data: { status: 'PAID', paidAt: tx.date, bankTransactionId: tx.id, matchedBy: 'AUTO' },
         });
         expensesMatched++;
       } else {
@@ -799,6 +1012,22 @@ export class FinanceService {
     }
     const expensesPlanned = plannedExpenses.reduce((sum, e) => sum + e.amountCents, 0);
 
+    const periodFilter: Prisma.ExpenseWhereInput = m
+      ? { period: `${year}-${String(m).padStart(2, '0')}` }
+      : { period: { startsWith: `${year}-` } };
+    const paidCosts = await this.prisma.expense.findMany({
+      where: {
+        status: 'PAID',
+        costItemId: { not: null },
+        OR: [periodFilter, { period: null, paidAt: range }],
+      },
+      select: {
+        amountCents: true,
+        kind: true,
+        costItem: { select: { name: true, group: { select: { id: true, name: true } } } },
+      },
+    });
+
     const series = buckets.map(({ key, ...rest }) => (m ? { day: key, ...rest } : { month: key, ...rest }));
     return {
       period: { year, month: m },
@@ -817,6 +1046,7 @@ export class FinanceService {
       statusCounts,
       byTeam: [...byTeam.values()].sort((a, b) => b.prescribedCents - a.prescribedCents),
       topDebtors: [...debtors.values()].sort((a, b) => b.owedCents - a.owedCents).slice(0, 5),
+      costs: aggregateCosts(paidCosts),
       expensesByPayee: [...byPayee.entries()]
         .map(([payee, cents]) => ({ payee, cents }))
         .sort((a, b) => b.cents - a.cents)

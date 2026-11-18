@@ -35,6 +35,11 @@ interface Overview {
   byTeam?: { teamName: string; prescribedCents?: number; paidCents?: number }[];
   topDebtors?: { memberId: string; name: string; owedCents: number }[];
   expensesByPayee?: { payee: string; cents: number }[];
+  costs?: {
+    totalPaidCents?: number;
+    byGroup?: { groupId: string | null; group: string; cents: number }[];
+    byItem?: { group: string; item: string; kind: 'RENT' | 'OTHER' | null; cents: number }[];
+  };
 }
 
 // Farby: modrá = predpísané, zelená = uhradené, oranžová = výdavky (rozlíšiteľné aj pri CVD)
@@ -234,6 +239,7 @@ export default function PrehladTab() {
             <DebtorsCard debtors={data?.topDebtors} />
             <PayeeCard payees={data?.expensesByPayee} />
           </div>
+          <CostsCard costs={data?.costs} />
         </>
       )}
     </div>
@@ -538,6 +544,49 @@ function PayeeCard({ payees }: { payees?: { payee: string; cents: number }[] }) 
             </li>
           ))}
         </ul>
+      )}
+    </Card>
+  );
+}
+
+const GROUP_COLORS = ['#2563eb', '#ea580c', '#16a34a', '#7c3aed', '#eab308', '#0891b2', '#db2777', '#64748b'];
+
+function CostsCard({ costs }: { costs?: Overview['costs'] }) {
+  const groups = costs?.byGroup ?? [];
+  const items = [...(costs?.byItem ?? [])].sort((a, b) => b.cents - a.cents).slice(0, 8);
+  const colorOf = (g: string) => {
+    const i = groups.findIndex((x) => x.group === g);
+    return GROUP_COLORS[(i < 0 ? 0 : i) % GROUP_COLORS.length];
+  };
+  const max = Math.max(1, ...items.map((i) => i.cents));
+  return (
+    <Card className="space-y-3">
+      <h2 className="font-semibold text-club-800">Náklady podľa skupiny a objektu</h2>
+      {items.length === 0 ? (
+        <p className="text-sm text-gray-500">Žiadne spárované náklady.</p>
+      ) : (
+        <>
+          <Legend items={groups.map((g): [string, string] => [`${g.group} (${eur(g.cents)})`, colorOf(g.group)])} />
+          <ul className="space-y-2">
+            {items.map((i, idx) => {
+              const kind = i.kind === 'RENT' ? ' · Nájomné' : i.kind === 'OTHER' ? ' · Ostatné' : '';
+              return (
+                <li key={`${i.group}-${i.item}-${i.kind}-${idx}`} className="text-sm">
+                  <div className="flex justify-between gap-2">
+                    <span className="truncate font-medium">
+                      {i.item}
+                      <span className="font-normal text-gray-500">{kind}</span>
+                    </span>
+                    <span className="shrink-0 text-gray-600">{eur(i.cents)}</span>
+                  </div>
+                  <div className="mt-1 h-2.5 overflow-hidden rounded-full bg-gray-200">
+                    <div className="h-full rounded-full" style={{ width: `${(i.cents / max) * 100}%`, background: colorOf(i.group) }} />
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
+        </>
       )}
     </Card>
   );

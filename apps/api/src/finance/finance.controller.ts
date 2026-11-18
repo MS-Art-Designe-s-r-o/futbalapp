@@ -43,7 +43,20 @@ const createExpenseSchema = z.object({
   dueDate: z.string().optional(),
   iban: z.string().optional(),
   description: z.string().optional(),
+  costItemId: z.string().min(1).nullable().optional(),
+  kind: z.enum(['RENT', 'OTHER']).nullable().optional(),
+  period: z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/, 'Obdobie musí byť vo formáte RRRR-MM').nullable().optional(),
 });
+
+const costGroupSchema = z.object({ name: z.string().trim().min(1) });
+const updateCostGroupSchema = z.object({ name: z.string().trim().min(1).optional(), sortOrder: z.number().int().optional() });
+const costItemSchema = z.object({ groupId: z.string().min(1), name: z.string().trim().min(1), hasKinds: z.boolean().optional() });
+const updateCostItemSchema = z.object({
+  name: z.string().trim().min(1).optional(),
+  hasKinds: z.boolean().optional(),
+  sortOrder: z.number().int().optional(),
+});
+const matchSchema = z.object({ bankTransactionId: z.string().min(1), force: z.boolean().optional() });
 
 const updateExpenseSchema = z.object({
   payee: z.string().min(1).optional(),
@@ -53,6 +66,9 @@ const updateExpenseSchema = z.object({
   iban: z.string().nullable().optional(),
   description: z.string().nullable().optional(),
   status: z.enum(['PLANNED', 'PAID']).optional(),
+  costItemId: z.string().min(1).nullable().optional(),
+  kind: z.enum(['RENT', 'OTHER']).nullable().optional(),
+  period: z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/, 'Obdobie musí byť vo formáte RRRR-MM').nullable().optional(),
 });
 
 const assignSchema = z.object({ memberId: z.string().min(1) });
@@ -130,12 +146,82 @@ export class FinanceController {
 
   @Get('expenses')
   @Roles('ADMIN', 'MANAGER')
-  listExpenses(@Query('status') status?: string, @Query('year') year?: string, @Query('month') month?: string) {
+  listExpenses(
+    @Query('status') status?: string,
+    @Query('year') year?: string,
+    @Query('month') month?: string,
+    @Query('groupId') groupId?: string,
+    @Query('itemId') itemId?: string,
+    @Query('matched') matched?: string,
+  ) {
     return this.financeService.listExpenses({
       status,
       year: year ? Number(year) : undefined,
       month: month ? Number(month) : undefined,
+      groupId: groupId || undefined,
+      itemId: itemId || undefined,
+      matched,
     });
+  }
+
+  @Get('cost-structure')
+  @Roles('ADMIN', 'MANAGER')
+  costStructure() {
+    return this.financeService.costStructure();
+  }
+
+  @Post('cost-groups')
+  @Roles('ADMIN', 'MANAGER')
+  createCostGroup(@Body(new ZodValidationPipe(costGroupSchema)) body: z.infer<typeof costGroupSchema>) {
+    return this.financeService.createCostGroup(body.name);
+  }
+
+  @Patch('cost-groups/:id')
+  @Roles('ADMIN', 'MANAGER')
+  updateCostGroup(@Param('id') id: string, @Body(new ZodValidationPipe(updateCostGroupSchema)) body: z.infer<typeof updateCostGroupSchema>) {
+    return this.financeService.updateCostGroup(id, body);
+  }
+
+  @Delete('cost-groups/:id')
+  @Roles('ADMIN', 'MANAGER')
+  deleteCostGroup(@Param('id') id: string) {
+    return this.financeService.deleteCostGroup(id);
+  }
+
+  @Post('cost-items')
+  @Roles('ADMIN', 'MANAGER')
+  createCostItem(@Body(new ZodValidationPipe(costItemSchema)) body: z.infer<typeof costItemSchema>) {
+    return this.financeService.createCostItem(body);
+  }
+
+  @Patch('cost-items/:id')
+  @Roles('ADMIN', 'MANAGER')
+  updateCostItem(@Param('id') id: string, @Body(new ZodValidationPipe(updateCostItemSchema)) body: z.infer<typeof updateCostItemSchema>) {
+    return this.financeService.updateCostItem(id, body);
+  }
+
+  @Delete('cost-items/:id')
+  @Roles('ADMIN', 'MANAGER')
+  deleteCostItem(@Param('id') id: string) {
+    return this.financeService.deleteCostItem(id);
+  }
+
+  @Get('bank/debits')
+  @Roles('ADMIN', 'MANAGER')
+  bankDebits(@Query('q') q?: string, @Query('amount') amount?: string, @Query('unmatched') unmatched?: string) {
+    return this.financeService.listDebits({ q, amount, unmatched });
+  }
+
+  @Post('expenses/:id/match')
+  @Roles('ADMIN', 'MANAGER')
+  matchExpense(@Param('id') id: string, @Body(new ZodValidationPipe(matchSchema)) body: z.infer<typeof matchSchema>) {
+    return this.financeService.matchExpense(id, body.bankTransactionId, body.force);
+  }
+
+  @Post('expenses/:id/unmatch')
+  @Roles('ADMIN', 'MANAGER')
+  unmatchExpense(@Param('id') id: string) {
+    return this.financeService.unmatchExpense(id);
   }
 
   @Post('expenses')
