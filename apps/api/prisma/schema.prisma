@@ -467,6 +467,8 @@ model FeePlan {
   currency       String    @default("EUR")
   period         FeePeriod
   dueDay         Int       @default(15)
+  /// Kód predpisu = posledná číslica VS (DDMMRRRR + kód): 0 členské, 1 dresy, 2 kemp, 3 súprava, 4–9 ďalšie
+  vsCode         Int       @default(0)
   /// Splatnosť jednorazového predpisu (period = ONE_TIME)
   dueDate        DateTime?
   activeFrom     DateTime

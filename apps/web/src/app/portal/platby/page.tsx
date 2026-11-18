@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { api, apiUpload } from '@/lib/api';
 import { Button, Card, ErrorText, Modal, inputCls, labelCls } from '@/components/ui';
+import { FEE_PRESETS, birthDateVariableSymbol } from '@fkknv/shared';
 import PrehladTab from './prehlad';
 import NakladyTab from './naklady';
 
@@ -22,6 +23,7 @@ interface FeePlan {
   name: string;
   amountCents: number;
   period: string;
+  vsCode?: number;
   dueDate?: string | null;
   teamCategory: { code: string } | null;
   assignments: { id: string }[];
@@ -248,6 +250,7 @@ function Plans() {
   const [categories, setCategories] = useState<Category[]>([]);
   const [seasonId, setSeasonId] = useState('');
   const [open, setOpen] = useState(false);
+  const [preset, setPreset] = useState<(typeof FEE_PRESETS)[number] | null>(null);
   const [editPlan, setEditPlan] = useState<FeePlan | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [genOpen, setGenOpen] = useState(false);
@@ -271,7 +274,36 @@ function Plans() {
         <Button variant="ghost" onClick={() => setGenOpen(true)}>
           Vygenerovať mesiac
         </Button>
-        <Button onClick={() => setOpen(true)}>+ Nový predpis</Button>
+        <Button
+          onClick={() => {
+            setPreset(null);
+            setOpen(true);
+          }}
+        >
+          + Nový predpis
+        </Button>
+      </div>
+      <div>
+        <h3 className="mb-2 text-sm font-semibold text-club-800">Prednastavené predpisy</h3>
+        <div className="grid gap-3 sm:grid-cols-3">
+          {FEE_PRESETS.map((pr) => (
+            <button
+              key={pr.key}
+              type="button"
+              onClick={() => {
+                setPreset(pr);
+                setOpen(true);
+              }}
+              className="rounded-lg border border-club-100 bg-white p-4 text-left hover:border-club-600 hover:bg-club-50"
+            >
+              <div className="text-base font-semibold text-club-800">{pr.name}</div>
+              <div className="mt-1 text-xs text-gray-600">
+                Jednorazový · <span className="font-medium">VS kód {pr.vsCode}</span>
+              </div>
+              <div className="mt-2 text-xs text-gray-500">Vyberiete hráča alebo skupinu</div>
+            </button>
+          ))}
+        </div>
       </div>
       <ErrorText>{error}</ErrorText>
       <div className="overflow-x-auto rounded-lg border border-club-100 bg-white">
@@ -282,6 +314,7 @@ function Plans() {
               <th className="px-4 py-3">Kategória</th>
               <th className="px-4 py-3">Suma</th>
               <th className="px-4 py-3">Typ</th>
+              <th className="px-4 py-3">Kód VS</th>
               <th className="px-4 py-3">Priradení</th>
               <th className="px-4 py-3"></th>
             </tr>
@@ -299,6 +332,9 @@ function Plans() {
                       : p.period === 'SEASONAL'
                         ? 'Sezónna'
                         : p.period}</td>
+                <td className="px-4 py-3" title={p.vsCode != null ? `napr. hráč nar. 14. 5. 2016 → ${birthDateVariableSymbol(new Date(Date.UTC(2016, 4, 14)), p.vsCode)}` : undefined}>
+                  {p.vsCode ?? '—'}
+                </td>
                 <td className="px-4 py-3">{p.assignments.length}</td>
                 <td className="px-4 py-3 text-right">
                   <div className="flex justify-end gap-3">
@@ -323,7 +359,7 @@ function Plans() {
             ))}
             {plans.length === 0 && (
               <tr>
-                <td colSpan={6} className="px-4 py-8 text-center text-gray-500">
+                <td colSpan={7} className="px-4 py-8 text-center text-gray-500">
                   Zatiaľ žiadne predpisy.
                 </td>
               </tr>
@@ -336,6 +372,7 @@ function Plans() {
         <FeePlanModal
           seasonId={seasonId}
           categories={categories}
+          preset={preset}
           onClose={() => setOpen(false)}
           onDone={() => {
             setOpen(false);
@@ -408,19 +445,21 @@ function PlanEditModal({ plan, onClose, onDone }: { plan: FeePlan; onClose: () =
 function FeePlanModal({
   seasonId,
   categories,
+  preset,
   onClose,
   onDone,
 }: {
   seasonId: string;
   categories: Category[];
+  preset?: (typeof FEE_PRESETS)[number] | null;
   onClose: () => void;
   onDone: () => void;
 }) {
-  const [name, setName] = useState('Členské mesačné');
-  const [amount, setAmount] = useState('25');
+  const [name, setName] = useState(preset ? preset.name : 'Členské mesačné');
+  const [amount, setAmount] = useState(preset ? '' : '25');
   const [category, setCategory] = useState('');
   const [dueDay, setDueDay] = useState('10');
-  const [period, setPeriod] = useState<'MONTHLY' | 'ONE_TIME'>('MONTHLY');
+  const [period, setPeriod] = useState<'MONTHLY' | 'ONE_TIME'>(preset ? 'ONE_TIME' : 'MONTHLY');
   const [dueDate, setDueDate] = useState('');
   const [memberIds, setMemberIds] = useState<string[]>([]);
   const [members, setMembers] = useState<MemberOpt[]>([]);
@@ -452,6 +491,10 @@ function FeePlanModal({
       setError('Zadajte splatnosť.');
       return;
     }
+    if (preset && !category && memberIds.length === 0) {
+      setError(`Vyberte kategóriu alebo konkrétnych hráčov. Predpis „${preset.name}“ sa nevytvorí pre celý klub.`);
+      return;
+    }
     setBusy(true);
     setError(null);
     try {
@@ -462,6 +505,7 @@ function FeePlanModal({
           name,
           amountCents: Math.round(parseFloat(amount) * 100),
           period,
+          ...(preset ? { vsCode: preset.vsCode } : {}),
           ...(period === 'MONTHLY'
             ? { dueDay: parseInt(dueDay, 10) }
             : { dueDate: new Date(`${dueDate}T12:00:00Z`).toISOString() }),
@@ -478,7 +522,7 @@ function FeePlanModal({
   }
 
   return (
-    <Modal open onClose={onClose} title="Nový predpis poplatku">
+    <Modal open onClose={onClose} title={preset ? `Predpis: ${preset.name}` : 'Nový predpis poplatku'}>
       <div className="space-y-3">
         <div>
           <label className={labelCls}>Názov</label>
@@ -508,7 +552,20 @@ function FeePlanModal({
             </div>
           )}
         </div>
-        <p className="text-xs text-gray-500">Variabilný symbol: reg. číslo + mesiac + rok (CCCCCCCMMRR)</p>
+        <div className="rounded-md bg-club-50 p-2 text-xs text-gray-600">
+          <p>Variabilný symbol = dátum narodenia hráča (DDMMRRRR) + kód predpisu.</p>
+          <p className="mt-0.5">
+            {preset ? (
+              <>
+                Kód predpisu: <b>{preset.vsCode}</b> — napr. hráč nar. 14. 5. 2016 →{' '}
+                <b>{birthDateVariableSymbol(new Date(Date.UTC(2016, 4, 14)), preset.vsCode)}</b>
+              </>
+            ) : (
+              <>Kód predpisu pridelí systém (napr. kód 2: hráč nar. 14. 5. 2016 → 140520162).</>
+            )}
+          </p>
+          <p className="mt-0.5 text-gray-500">Hráč bez dátumu narodenia dostane náhradný variabilný symbol.</p>
+        </div>
         <div>
           <label className={labelCls}>Kategória</label>
           <select value={category} onChange={(e) => setCategory(e.target.value)} className={inputCls}>

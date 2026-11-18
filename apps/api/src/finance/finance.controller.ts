@@ -29,6 +29,7 @@ const createFeePlanSchema = z.object({
   period: z.enum(['MONTHLY', 'QUARTERLY', 'ONE_TIME', 'SEASON']),
   dueDay: z.number().int().min(1).max(28).optional(),
   dueDate: z.string().optional(),
+  vsCode: z.number().int().min(0).max(9).optional(),
   memberIds: z.array(z.string().min(1)).optional(),
 });
 

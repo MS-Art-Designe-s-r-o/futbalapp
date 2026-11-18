@@ -43,3 +43,21 @@ describe('paymentVariableSymbol', () => {
     expect(parsePaymentVariableSymbol('2609000042')).toBeNull();
   });
 });
+
+import { birthDateVariableSymbol, parseBirthDateVariableSymbol, FEE_PRESETS } from './payments';
+describe('VS podľa dátumu narodenia', () => {
+  it('generuje DDMMRRRR + kód predpisu', () => {
+    expect(birthDateVariableSymbol(new Date(Date.UTC(2016, 4, 14)), 2)).toBe('140520162');
+    expect(birthDateVariableSymbol('2009-01-03T00:00:00Z', 0)).toBe('030120090');
+  });
+  it('parse je inverzný a odmietne neplatné dátumy', () => {
+    expect(parseBirthDateVariableSymbol('140520162')).toEqual({ day: 14, month: 5, year: 2016, code: 2 });
+    expect(parseBirthDateVariableSymbol('310220161')).toBeNull();
+    expect(parseBirthDateVariableSymbol('1234567890')).toBeNull();
+  });
+  it('kód mimo 0..9 a neplatný dátum zlyhá; prednastavené kódy sú 1..3', () => {
+    expect(() => birthDateVariableSymbol(new Date(), 10)).toThrow();
+    expect(() => birthDateVariableSymbol('x', 1)).toThrow();
+    expect(FEE_PRESETS.map((p) => p.vsCode)).toEqual([1, 2, 3]);
+  });
+});

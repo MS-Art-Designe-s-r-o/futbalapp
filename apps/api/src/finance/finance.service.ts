@@ -1,6 +1,7 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import type { BankTransaction, Prisma } from '@prisma/client';
-import { generateVariableSymbol, parsePaymentVariableSymbol, paymentVariableSymbol, periodLabel } from '@fkknv/shared';
+import { parseBirthDateVariableSymbol, parsePaymentVariableSymbol, periodLabel } from '@fkknv/shared';
+import { decideVsMatch, nextPlanVsCode, obligationVariableSymbol } from './vs-helpers';
 import { PrismaService } from '../prisma/prisma.service';
 import { parseBankStatement } from './bank-statement';
 import { aggregateCosts, filterSortDebits, planMatch, validateCostFields } from './cost-helpers';
@@ -65,14 +66,6 @@ export class FinanceService {
     });
   }
 
-  /** VS povinnosti: nový formát (reg. číslo + MMRR), inak starý (RRMM + memberSeq). */
-  private obligationVs(member: { memberSeq: number; registrationNumber: string | null }, year: number, month: number) {
-    return (
-      paymentVariableSymbol(member.registrationNumber, { year, month }) ??
-      generateVariableSymbol(member.memberSeq, { year, month })
-    );
-  }
-
   /** Jednorazový predpis: jedna povinnosť na každé priradenie (idempotentné). */
   private async generateOneTimeObligations(planId: string) {
     const plan = await this.prisma.feePlan.findUnique({ where: { id: planId } });
@@ -82,7 +75,7 @@ export class FinanceService {
     const label = `JEDNORAZOVO-${periodLabel(year, month)}`;
     const assignments = await this.prisma.feeAssignment.findMany({
       where: { feePlanId: planId, active: true },
-      include: { member: { select: { memberSeq: true, registrationNumber: true } } },
+      include: { member: { select: { memberSeq: true, registrationNumber: true, birthDate: true } } },
     });
     let created = 0;
     for (const a of assignments) {
@@ -93,7 +86,7 @@ export class FinanceService {
             memberId: a.memberId,
             periodLabel: label,
             amountCents: a.overrideCents ?? plan.amountCents,
-            variableSymbol: this.obligationVs(a.member, year, month),
+            variableSymbol: obligationVariableSymbol(a.member, plan, { year, month }),
             dueDate: plan.dueDate,
           },
         });
@@ -114,6 +107,7 @@ export class FinanceService {
     period: 'MONTHLY' | 'QUARTERLY' | 'ONE_TIME' | 'SEASON';
     dueDay?: number;
     dueDate?: string;
+    vsCode?: number;
   }) {
     const season = await this.prisma.season.findUnique({ where: { id: input.seasonId } });
     if (!season) throw new NotFoundException('Sezóna neexistuje');
@@ -131,8 +125,15 @@ export class FinanceService {
     if (input.teamCategoryCode && !category) throw new NotFoundException('Kategória neexistuje');
     const explicitIds = [...new Set(input.memberIds ?? [])];
 
+    let vsCode = input.vsCode;
+    if (vsCode === undefined) {
+      const used = await this.prisma.feePlan.findMany({ select: { vsCode: true } });
+      vsCode = nextPlanVsCode(input.period, used.map((p) => p.vsCode));
+    }
+
     const plan = await this.prisma.feePlan.create({
       data: {
+        vsCode,
         seasonId: season.id,
         teamCategoryId: category?.id,
         name: input.name,
@@ -201,7 +202,7 @@ export class FinanceService {
     const assignments = await this.prisma.feeAssignment.findMany({
       // sociálnym prípadom sa poplatok nevytvára
       where: { active: true, feePlan: { period: 'MONTHLY' }, member: { socialCase: false } },
-      include: { feePlan: true, member: { select: { memberSeq: true, registrationNumber: true } } },
+      include: { feePlan: true, member: { select: { memberSeq: true, registrationNumber: true, birthDate: true } } },
     });
 
     const label = periodLabel(year, month);
@@ -216,7 +217,7 @@ export class FinanceService {
             memberId: assignment.memberId,
             periodLabel: label,
             amountCents: amount,
-            variableSymbol: this.obligationVs(assignment.member, year, month),
+            variableSymbol: obligationVariableSymbol(assignment.member, assignment.feePlan, { year, month }),
             dueDate,
           },
         });
@@ -313,21 +314,45 @@ export class FinanceService {
         const link = await this.prisma.bankPayerLink.findUnique({ where: { iban: tx.counterpartyIban } });
         if (link) memberId = link.memberId;
       }
-      // 2. VS = náš variabilný symbol (nový: reg. číslo + MMRR; starý: RRMM + memberSeq)
+      // 2. VS: presný VS otvorenej povinnosti → VS podľa dátumu narodenia → starší formát
+      let preferVs: string | undefined;
+      let ambiguous = false;
       if (!memberId && tx.variableSymbol) {
-        const vs = tx.variableSymbol.trim();
-        const parsedNew = parsePaymentVariableSymbol(vs);
-        if (parsedNew) memberId = regIndex.get(parsedNew.registrationDigits) ?? null;
-        if (!memberId && /^\d{10}$/.test(vs)) {
-          const member = await this.prisma.member.findUnique({ where: { memberSeq: Number(vs.slice(4)) } });
-          if (member) memberId = member.id;
+        const vs = tx.variableSymbol.trim().replace(/\s+/g, '');
+        if (/^\d+$/.test(vs)) {
+          const owners = await this.prisma.paymentObligation.findMany({
+            where: { variableSymbol: vs, status: { in: ['PENDING', 'PARTIAL', 'OVERDUE'] } },
+            select: { memberId: true },
+          });
+          const bd = owners.length === 0 ? parseBirthDateVariableSymbol(vs) : null;
+          const birthMembers = bd
+            ? await this.prisma.member.findMany({
+                where: { birthDate: new Date(Date.UTC(bd.year, bd.month - 1, bd.day)), status: { not: 'INACTIVE' } },
+                select: { id: true },
+              })
+            : [];
+          const decision = decideVsMatch(owners.map((o) => o.memberId), birthMembers.map((m) => m.id));
+          if (decision.kind === 'member') {
+            memberId = decision.memberId;
+            if (decision.preferExactVs) preferVs = vs;
+          } else if (decision.kind === 'ambiguous') {
+            ambiguous = true;
+          } else {
+            const parsedNew = parsePaymentVariableSymbol(vs);
+            if (parsedNew) memberId = regIndex.get(parsedNew.registrationDigits) ?? null;
+            if (!memberId && /^\d{10}$/.test(vs)) {
+              const member = await this.prisma.member.findUnique({ where: { memberSeq: Number(vs.slice(4)) } });
+              if (member) memberId = member.id;
+            }
+          }
         }
       }
       if (memberId) {
-        await this.allocateToMember(tx, memberId, 'AUTO');
+        await this.allocateToMember(tx, memberId, 'AUTO', preferVs);
         matched++;
         continue;
       }
+      void ambiguous; // viac členov s rovnakým VS → bez auto-priradenia, len návrh podľa mena
       // 3. fuzzy meno → návrh (bez auto-priradenia)
       const sug = suggestMemberId(tx.counterpartyName, tx.message, index);
       if (sug) {
@@ -339,11 +364,15 @@ export class FinanceService {
   }
 
   /** Rozúčtuje sumu pohybu na otvorené povinnosti člena (od najstaršej). */
-  private async allocateToMember(tx: BankTransaction, memberId: string, matchedBy: 'AUTO' | 'MANUAL') {
-    const obligations = await this.prisma.paymentObligation.findMany({
+  private async allocateToMember(tx: BankTransaction, memberId: string, matchedBy: 'AUTO' | 'MANUAL', preferVs?: string) {
+    const found = await this.prisma.paymentObligation.findMany({
       where: { memberId, status: { in: ['PENDING', 'PARTIAL', 'OVERDUE'] } },
       orderBy: { dueDate: 'asc' },
     });
+    // povinnosti s presným VS platby najprv, potom ostatné od najstaršej
+    const obligations = preferVs
+      ? [...found.filter((o) => o.variableSymbol === preferVs), ...found.filter((o) => o.variableSymbol !== preferVs)]
+      : found;
     let remaining = tx.amountCents;
     for (const o of obligations) {
       if (remaining <= 0) break;
