@@ -454,6 +454,17 @@ export type CreateClubDocumentInput = z.infer<typeof createClubDocumentSchema>;
 export const updateClubDocumentSchema = createClubDocumentSchema.partial();
 export type UpdateClubDocumentInput = z.infer<typeof updateClubDocumentSchema>;
 
+/** Úprava hráča trénerom (postavenie, sociálny prípad, zdravotné poznámky, hráčske skupiny). */
+export const coachUpdateMemberSchema = z
+  .object({
+    position: z.enum(PLAYER_POSITIONS).nullable().optional(),
+    socialCase: z.boolean().optional(),
+    healthNotes: z.string().max(2000).nullable().optional(),
+    teamIds: z.array(z.string().min(1)).optional(),
+  })
+  .strict();
+export type CoachUpdateMemberInput = z.infer<typeof coachUpdateMemberSchema>;
+
 /** Povolené typy súborov dokumentov (ukladajú sa bez zmeny). */
 export const CLUB_DOCUMENT_MIME_TYPES = [
   'application/pdf',

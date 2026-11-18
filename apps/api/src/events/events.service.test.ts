@@ -164,3 +164,14 @@ describe('brankársky tréning: výnimka pri rezervácii plochy', () => {
     }
   });
 });
+
+describe('skupiny brankárov: tréner len tréningy', () => {
+  const coach = { id: 'u2', roles: [{ role: 'COACH', teamId: 'g1' }] } as never;
+  it('zápas na skupinu brankárov sa pre trénera odmietne, tréning prejde, vedenie smie všetko', async () => {
+    const { service, prisma } = make();
+    (prisma as never as Record<string, unknown>).team = { count: vi.fn(async () => 1), findUnique: prisma.team.findUnique };
+    await expect(service.assertGkTeamsOnlyTraining(coach, 'MATCH', ['g1'])).rejects.toMatchObject({ status: 403 });
+    await expect(service.assertGkTeamsOnlyTraining(coach, 'TRAINING', ['g1'])).resolves.toBeUndefined();
+    await expect(service.assertGkTeamsOnlyTraining(admin, 'MATCH', ['g1'])).resolves.toBeUndefined();
+  });
+});

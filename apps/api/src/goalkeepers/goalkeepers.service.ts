@@ -141,6 +141,20 @@ export class GoalkeepersService implements OnApplicationBootstrap {
       if (!members.size) continue;
       for (const userId of coachIds) wanted.add(`${userId}|${teamId}`);
     }
+    // každý tréner bežného družstva smie vytvárať brankárske tréningy: dostane scope na skupinu
+    // „<družstvo> Brankári“ svojej kategórie a na spoločnú „Brankári (všetci)“
+    const regularCoaches = await this.prisma.userRole.findMany({
+      where: { role: 'COACH', team: { isGoalkeeperGroup: false, isDemo: false } },
+      select: { userId: true, team: { select: { teamCategoryId: true } } },
+    });
+    const gkTeamCategory = new Map(allGkTeams.map((t) => [t.id, t.teamCategoryId]));
+    for (const [teamId, members] of desired) {
+      if (!members.size) continue;
+      const isAll = allGkTeams.find((t) => t.id === teamId)?.name === ALL_GOALKEEPERS_NAME;
+      for (const rc of regularCoaches) {
+        if (isAll || (rc.team && rc.team.teamCategoryId === gkTeamCategory.get(teamId))) wanted.add(`${rc.userId}|${teamId}`);
+      }
+    }
     const autoRoles = await this.prisma.userRole.findMany({
       where: { role: 'COACH', team: { isGoalkeeperGroup: true } },
       select: { id: true, userId: true, teamId: true },

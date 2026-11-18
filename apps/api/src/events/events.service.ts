@@ -308,6 +308,15 @@ export class EventsService {
    * Vytvorí jednu udalosť; pri TRAINING predpripraví dochádzku družstva,
    * pri MATCH/TOURNAMENT vytvorí Match záznam.
    */
+  /** Skupiny brankárov: nevedenie (tréner) smie pre ne vytvárať len tréningy — nie zápasy, turnaje ani rodičovské. */
+  async assertGkTeamsOnlyTraining(user: AuthUser, type: string, teamIds: Array<string | undefined | null>) {
+    if (isStaff(user) || type === 'TRAINING') return;
+    const ids = [...new Set(teamIds.filter((x): x is string => !!x))];
+    if (ids.length === 0) return;
+    const gk = await this.prisma.team.count({ where: { id: { in: ids }, isGoalkeeperGroup: true } });
+    if (gk > 0) throw new ForbiddenException('Pre skupinu brankárov možno vytvárať len tréningy');
+  }
+
   async create(input: CreateEventInput, createdById: string, isDemo = false) {
     const ids = input.type === 'TRAINING' ? [...new Set(input.teamIds?.length ? input.teamIds : input.teamId ? [input.teamId] : [])] : [];
     if (ids.length <= 1) return this.createOne({ ...input, teamId: ids[0] ?? input.teamId }, createdById, isDemo);

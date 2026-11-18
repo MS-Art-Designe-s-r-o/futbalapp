@@ -47,7 +47,8 @@ export class EventsController {
 
   @Post()
   @Roles('ADMIN', 'MANAGER', 'COACH')
-  create(@Body(new ZodValidationPipe(createEventSchema)) body: CreateEventInput, @CurrentUser() user: AuthUser) {
+  async create(@Body(new ZodValidationPipe(createEventSchema)) body: CreateEventInput, @CurrentUser() user: AuthUser) {
+    await this.eventsService.assertGkTeamsOnlyTraining(user, body.type, [body.teamId, ...(body.teamIds ?? []), ...(body.audienceTeamIds ?? [])]);
     if (!canManageTeam(user, body.teamId ?? null) && body.teamId) {
       throw new ForbiddenException('Nemôžete vytvárať udalosti pre iné družstvo');
     }

@@ -1,9 +1,10 @@
-import { BadRequestException, Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ForbiddenException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
 import {
   categoryForBirthDate,
   ROLES,
   type CategoryCode,
+  type CoachUpdateMemberInput,
   type CreateMemberInput,
   type MemberStatus,
   type Role,
@@ -16,6 +17,7 @@ import { IssfService } from '../integrations/issf/issf.service';
 import { parseRosterXlsx, type RosterRow } from './roster-import';
 import type { Member as MemberRecord } from '@prisma/client';
 import type { AuthUser } from '../auth/current-user.decorator';
+import { coachTeamIds, isStaff } from '../auth/scope';
 
 /** Pravidlo zaradenia do kategórie + predvolené družstvo (pre import). */
 interface AssignRule {
@@ -561,6 +563,77 @@ export class MembersService {
     return { items, summary };
   }
 
+  /**
+   * Úprava hráča trénerom. Tréner smie upraviť len hráča zo svojho družstva a
+   * hráčske skupiny len v rámci svojich nebrankárskych družstiev (`teamIds` = požadovaná
+   * množina týchto družstiev; cudzie družstvá hráča sa nemenia). Vedenie smie nastaviť
+   * ľubovoľné nebrankárske družstvá. Skupiny brankárov sa plnia automaticky — nedotýkame sa ich.
+   */
+  async coachUpdate(id: string, input: CoachUpdateMemberInput, user: AuthUser) {
+    const staff = isStaff(user);
+    const own = coachTeamIds(user);
+    if (!staff && !(await this.memberInTeams(id, own))) {
+      throw new ForbiddenException('Hráč nie je vo vašom družstve');
+    }
+    const member = await this.prisma.member.findUnique({ where: { id }, select: { id: true, isDemo: true } });
+    if (!member) throw new NotFoundException('Člen neexistuje');
+    if (member.isDemo !== user.isDemo) throw new ForbiddenException('Člen neexistuje');
+
+    let toRemove: string[] = [];
+    let toAdd: string[] = [];
+    let seasonId = '';
+    if (input.teamIds !== undefined) {
+      const season = await this.prisma.season.findFirst({ where: { isActive: true } });
+      if (!season) throw new BadRequestException('Neexistuje aktívna sezóna');
+      seasonId = season.id;
+      const desired = [...new Set(input.teamIds)];
+      // družstvá, ktoré smie volajúci meniť (nebrankárske; tréner len vlastné)
+      const managedTeams = await this.prisma.team.findMany({
+        where: { isGoalkeeperGroup: false, ...(staff ? {} : { id: { in: own } }) },
+        select: { id: true },
+      });
+      const managed = new Set(managedTeams.map((t) => t.id));
+      if (desired.some((t) => !managed.has(t))) {
+        throw new BadRequestException(
+          staff ? 'Niektoré družstvo neexistuje alebo je skupina brankárov' : 'Môžete vybrať len svoje družstvá (bez skupín brankárov)',
+        );
+      }
+      const current = await this.prisma.teamMembership.findMany({
+        where: { memberId: id, seasonId, leftAt: null },
+        select: { teamId: true, team: { select: { isGoalkeeperGroup: true } } },
+      });
+      const currentIds = current.map((c) => c.teamId);
+      toRemove = currentIds.filter((t) => managed.has(t) && !desired.includes(t));
+      toAdd = desired.filter((t) => !currentIds.includes(t));
+      const remainingNonGk = current.filter((c) => !c.team.isGoalkeeperGroup && !toRemove.includes(c.teamId)).length;
+      if (remainingNonGk + toAdd.length === 0) {
+        throw new BadRequestException('Hráč musí zostať aspoň v jednom družstve');
+      }
+    }
+
+    const data: Record<string, unknown> = {};
+    if (input.position !== undefined) data.position = input.position;
+    if (input.socialCase !== undefined) data.socialCase = input.socialCase;
+    if (input.healthNotes !== undefined) data.healthNotes = input.healthNotes?.trim() ? input.healthNotes : null;
+    if (Object.keys(data).length) await this.prisma.member.update({ where: { id }, data });
+
+    if (toRemove.length) {
+      await this.prisma.teamMembership.deleteMany({ where: { memberId: id, seasonId, teamId: { in: toRemove } } });
+    }
+    for (const teamId of toAdd) {
+      await this.prisma.teamMembership.upsert({
+        where: { memberId_seasonId_teamId: { memberId: id, seasonId, teamId } },
+        create: { memberId: id, seasonId, teamId, isException: true },
+        update: { isException: true, leftAt: null },
+      });
+    }
+
+    if (input.teamIds !== undefined || input.position !== undefined) {
+      await this.goalkeepers.sync().catch((e) => this.logger.warn(`Synchronizácia skupín brankárov zlyhala: ${e instanceof Error ? e.message : e}`));
+    }
+    return this.get(id);
+  }
+
   /** Je člen v niektorom z uvedených družstiev v aktívnej sezóne? (scope trénera) */
   async memberInTeams(memberId: string, teamIds: string[]): Promise<boolean> {
     if (teamIds.length === 0) return false;
@@ -928,14 +1001,13 @@ export class MembersService {
   /**
    * Zoznam registračných preukazov so scope podľa roly:
    *  - ADMIN/MANAGER: všetci hráči s preukazom,
-   *  - COACH: hráči z jeho družstiev,
+   *  - COACH: len vlastný preukaz / deti (platnosť preukazov hráčov družstva tréner nevidí),
    *  - PLAYER/PARENT: vlastný preukaz + preukazy detí.
    * Vždy iba AKTÍVNI členovia (status ACTIVE).
    * Zoradené od najskoršej platnosti; po platnosti sú zvýraznené (expired).
    */
   async registrationCards(user: AuthUser) {
     const staff = user.roles.some((r) => r.role === 'ADMIN' || r.role === 'MANAGER');
-    const teamIds = user.roles.filter((r) => r.role === 'COACH' && r.teamId).map((r) => r.teamId as string);
 
     let where: Record<string, unknown> = {
       isDemo: user.isDemo,
@@ -944,15 +1016,6 @@ export class MembersService {
     };
     if (!staff) {
       const or: Array<Record<string, unknown>> = [];
-      if (teamIds.length) {
-        // tréner sleduje platnosť preukazov – iba hráči s vyplneným dátumom
-        or.push({
-          AND: [
-            { registrationValidUntil: { not: null } },
-            { memberships: { some: { leftAt: null, season: { isActive: true }, teamId: { in: teamIds } } } },
-          ],
-        });
-      }
       // vlastný člen + deti (rodič) – zobrazíme aj bez vyplneného dátumu platnosti
       or.push({ user: { id: user.id } });
       or.push({ guardians: { some: { userId: user.id } } });

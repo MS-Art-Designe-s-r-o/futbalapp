@@ -15,7 +15,14 @@ import {
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import type { Response } from 'express';
-import { createMemberSchema, publicConsentSchema, type CreateMemberInput, type PublicConsentInput } from '@fkknv/shared';
+import {
+  coachUpdateMemberSchema,
+  createMemberSchema,
+  publicConsentSchema,
+  type CoachUpdateMemberInput,
+  type CreateMemberInput, type PublicConsentInput,
+} from '@fkknv/shared';
+import { stripRegistrationForCoach } from './registration-visibility';
 import { MembersService } from './members.service';
 import { Roles } from '../auth/roles.decorator';
 import { Public } from '../auth/public.decorator';
@@ -29,7 +36,7 @@ export class MembersController {
 
   @Get()
   @Roles('ADMIN', 'MANAGER', 'COACH')
-  list(
+  async list(
     @CurrentUser() user: AuthUser,
     @Query('category') categoryCode?: string,
     @Query('team') teamId?: string,
@@ -40,7 +47,7 @@ export class MembersController {
   ) {
     // tréner vidí len hráčov svojich družstiev
     const teamIds = isStaff(user) ? undefined : coachTeamIds(user);
-    return this.membersService.list({
+    const rows = await this.membersService.list({
       categoryCode,
       teamId,
       teamIds,
@@ -50,6 +57,7 @@ export class MembersController {
       hideInactive: hideInactive === 'true',
       isDemo: user.isDemo,
     });
+    return stripRegistrationForCoach(user, rows);
   }
 
   /** Platnosť registračných preukazov (scope podľa roly) — pre dashboard. */
@@ -127,7 +135,22 @@ export class MembersController {
     const member = await this.membersService.get(id);
     // demo izolácia: demo konto vidí len demo členov a naopak
     if (member.isDemo !== user.isDemo) throw new ForbiddenException('Člen neexistuje');
-    return member;
+    return stripRegistrationForCoach(user, member);
+  }
+
+  /**
+   * Úprava hráča trénerom: postavenie, sociálny prípad, zdravotné poznámky a hráčske
+   * skupiny (len z jeho družstiev). Vedenie môže nastaviť ľubovoľné nebrankárske družstvá.
+   */
+  @Patch(':id/coach-update')
+  @Roles('ADMIN', 'MANAGER', 'COACH')
+  async coachUpdate(
+    @Param('id') id: string,
+    @CurrentUser() user: AuthUser,
+    @Body(new ZodValidationPipe(coachUpdateMemberSchema)) body: CoachUpdateMemberInput,
+  ) {
+    const updated = await this.membersService.coachUpdate(id, body, user);
+    return stripRegistrationForCoach(user, updated);
   }
 
   /** Dochádzka hráča (karta hráča) — vedenie, tréner družstva hráča. */

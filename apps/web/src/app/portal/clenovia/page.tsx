@@ -6,7 +6,7 @@ import { formatEventDateSk, PLAYER_POSITIONS, PLAYER_POSITION_LABELS_SK } from '
 import { MemberPaymentsPanel } from '@/components/member-payments-panel';
 import { api, apiUpload, API_URL } from '@/lib/api';
 import { categoryColor } from '@/lib/colors';
-import { isAdmin, isStaff, useMe } from '@/lib/auth';
+import { coachTeams, isAdmin, isStaff, useMe } from '@/lib/auth';
 import { PlayerFitnessPanel } from '@/components/fitness';
 import { MemberAttendancePanel } from '@/components/member-attendance';
 import { Button, Card, ErrorText, Modal, PlayerPos, inputCls, labelCls } from '@/components/ui';
@@ -175,7 +175,7 @@ function MembersTable() {
       const ta = a.memberships[0]?.team.name ?? '';
       const tb = b.memberships[0]?.team.name ?? '';
       if (ta !== tb) return ta === '' ? 1 : tb === '' ? -1 : ta.localeCompare(tb, 'sk');
-    } else if (sortBy === 'card') {
+    } else if (sortBy === 'card' && staff) {
       const va = a.registrationValidUntil ? new Date(a.registrationValidUntil).getTime() : Infinity;
       const vb = b.registrationValidUntil ? new Date(b.registrationValidUntil).getTime() : Infinity;
       if (va !== vb) return va - vb; // najskôr končiaca platnosť hore, bez preukazu dole
@@ -325,7 +325,7 @@ function MembersTable() {
             >
               <option value="lastName">Priezvisko</option>
               <option value="team">Družstvo</option>
-              <option value="card">Platnosť preukazu</option>
+              {staff && <option value="card">Platnosť preukazu</option>}
             </select>
           </div>
           <div className="flex items-center gap-2">
@@ -488,7 +488,7 @@ function MembersTable() {
               <th className="whitespace-nowrap px-3 py-2">Materský klub</th>
               <th className="whitespace-nowrap px-3 py-2">Hosťujúci klub</th>
               <th className="whitespace-nowrap px-3 py-2">Klub. príslušnosť</th>
-              <th className="whitespace-nowrap px-3 py-2">Preukaz do</th>
+              {staff && <th className="whitespace-nowrap px-3 py-2">Preukaz do</th>}
               <th className="whitespace-nowrap px-3 py-2">Konto</th>
               <th className="sticky right-0 z-20 whitespace-nowrap bg-club-50 px-3 py-2 text-right shadow-[-2px_0_4px_-2px_rgba(0,0,0,0.15)]">Stav / akcie</th>
             </tr>
@@ -539,6 +539,7 @@ function MembersTable() {
                 <td className="whitespace-nowrap px-3 py-2 text-gray-600">{m.homeClub ?? '—'}</td>
                 <td className="whitespace-nowrap px-3 py-2 text-gray-600">{m.guestClub ?? '—'}</td>
                 <td className="whitespace-nowrap px-3 py-2 text-gray-600">{m.clubAffiliation ?? '—'}</td>
+                {staff && (
                 <td className="px-3 py-2">
                   {(() => {
                     const b = cardBadge(m.registrationValidUntil);
@@ -552,6 +553,7 @@ function MembersTable() {
                     );
                   })()}
                 </td>
+                )}
                 <td className="whitespace-nowrap px-3 py-2 text-gray-600">{m.user?.email ?? '—'}</td>
                 <td className="sticky right-0 z-10 bg-white px-3 py-2 shadow-[-2px_0_4px_-2px_rgba(0,0,0,0.15)]">
                   <div className="flex items-center justify-end gap-2">
@@ -575,7 +577,7 @@ function MembersTable() {
             ))}
             {pagedMembers.length === 0 && (
               <tr>
-                <td colSpan={11} className="px-4 py-8 text-center text-gray-500">
+                <td colSpan={staff ? 11 : 10} className="px-4 py-8 text-center text-gray-500">
                   {members.length === 0 ? 'Žiadni členovia.' : 'Pre zadané priezvisko sa nič nenašlo.'}
                 </td>
               </tr>
@@ -617,6 +619,7 @@ function MembersTable() {
           teams={teams.filter((t) => !t.isGoalkeeperGroup)}
           canGrantAdmin={isAdmin(me)}
           staff={staff}
+          onSaved={() => void load()}
           onClose={() => {
             setEditing(null);
             setCreating(false);
@@ -673,6 +676,7 @@ function MemberModal({
   teams,
   canGrantAdmin,
   staff,
+  onSaved,
   onClose,
   onDone,
 }: {
@@ -680,9 +684,11 @@ function MemberModal({
   teams: Team[];
   canGrantAdmin: boolean;
   staff: boolean;
+  onSaved?: () => void;
   onClose: () => void;
   onDone: () => void;
 }) {
+  const { me } = useMe();
   const [firstName, setFirstName] = useState(member?.firstName ?? '');
   const [lastName, setLastName] = useState(member?.lastName ?? '');
   const [birthDate, setBirthDate] = useState(member?.birthDate?.slice(0, 10) ?? '');
@@ -926,11 +932,20 @@ function MemberModal({
 
           {member.memberships.length > 0 && <GuardiansEditor childId={member.id} />}
 
+          {tab === 'info' && (
+            <CoachEditPanel
+              member={member}
+              coachTeamList={coachTeams(me).map((t) => t.id)}
+              allTeams={teams}
+              onSaved={() => onSaved?.()}
+            />
+          )}
+
             </>
           )}
           <p className="text-xs text-gray-500">
-            Ako tréner môžete priradiť rodiča; o presun hráča požiadate v menu <strong>Presuny</strong>. Údaje hráča
-            upravuje vedenie klubu.
+            Ako tréner môžete priradiť rodiča a upraviť postavenie, skupiny, sociálny prípad a zdravotné poznámky; o
+            presun hráča do cudzieho družstva požiadate v menu <strong>Presuny</strong>.
           </p>
           <div className="flex justify-end">
             <Button variant="ghost" onClick={onClose}>
@@ -1350,6 +1365,121 @@ const RELATION_OPTIONS = [
   { value: 'RELATIVE', label: 'Iný príbuzný' },
 ];
 const RELATION_LABEL: Record<string, string> = Object.fromEntries(RELATION_OPTIONS.map((o) => [o.value, o.label]));
+
+function CoachEditPanel({
+  member,
+  coachTeamList,
+  allTeams,
+  onSaved,
+}: {
+  member: MemberRow;
+  coachTeamList: string[];
+  allTeams: Team[];
+  onSaved: () => void;
+}) {
+  // len vlastné nebrankárske družstvá trénera
+  const ownTeams = allTeams.filter((t) => coachTeamList.includes(t.id) && !t.isGoalkeeperGroup);
+  const ownIds = new Set(ownTeams.map((t) => t.id));
+  const [position, setPosition] = useState(member.position ?? '');
+  const [socialCase, setSocialCase] = useState(member.socialCase ?? false);
+  const [healthNotes, setHealthNotes] = useState(member.healthNotes ?? '');
+  const [teamIds, setTeamIds] = useState<string[]>(() =>
+    member.memberships.map((m) => m.team.id).filter((id) => coachTeamList.includes(id)),
+  );
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [ok, setOk] = useState(false);
+  // znovu načítaj výber, keď sa zmení hráč, jeho zaradenia alebo sa dotiahnu družstvá trénera
+  const coachKey = coachTeamList.join(',');
+  const membershipKey = member.memberships.map((m) => m.team.id).join(',');
+  useEffect(() => {
+    setTeamIds(member.memberships.map((m) => m.team.id).filter((id) => coachTeamList.includes(id)));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [member.id, coachKey, membershipKey]);
+
+  if (!member.memberships.length) return null;
+  const otherTeamsCount = member.memberships.filter((m) => !ownIds.has(m.team.id)).length;
+
+  async function save() {
+    setBusy(true);
+    setError(null);
+    setOk(false);
+    try {
+      await api(`/members/${member.id}/coach-update`, {
+        method: 'PATCH',
+        body: JSON.stringify({
+          position: position || null,
+          socialCase,
+          healthNotes: healthNotes.trim() ? healthNotes : null,
+          teamIds,
+        }),
+      });
+      setOk(true);
+      onSaved();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Uloženie zlyhalo');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="space-y-3 rounded-md border border-club-200 p-3">
+      <h4 className="font-semibold text-club-800">Úprava trénerom</h4>
+      <div>
+        <label className={labelCls}>Postavenie</label>
+        <select value={position} onChange={(e) => setPosition(e.target.value)} className={inputCls}>
+          <option value="">—</option>
+          {PLAYER_POSITIONS.map((p) => (
+            <option key={p} value={p}>
+              {PLAYER_POSITION_LABELS_SK[p]}
+            </option>
+          ))}
+        </select>
+      </div>
+      <div>
+        <label className={labelCls}>Skupiny, v ktorých hráč hrá</label>
+        <div className="flex flex-wrap gap-x-4 gap-y-1">
+          {ownTeams.map((t) => (
+            <label key={t.id} className="flex items-center gap-1.5">
+              <input
+                type="checkbox"
+                checked={teamIds.includes(t.id)}
+                onChange={() => setTeamIds((cur) => (cur.includes(t.id) ? cur.filter((x) => x !== t.id) : [...cur, t.id]))}
+              />
+              {t.name}
+            </label>
+          ))}
+        </div>
+        <p className="mt-1 text-xs text-gray-500">
+          Na výber len vaše družstvá. Presun do cudzieho družstva ide cez Presuny.
+          {otherTeamsCount > 0 && ' Ostatné družstvá hráča sa nemenia.'}
+        </p>
+      </div>
+      <label className="flex items-center gap-2">
+        <input type="checkbox" checked={socialCase} onChange={(e) => setSocialCase(e.target.checked)} />
+        Sociálny prípad
+      </label>
+      <div>
+        <label className={labelCls}>Zdravotné poznámky</label>
+        <textarea
+          value={healthNotes}
+          onChange={(e) => setHealthNotes(e.target.value)}
+          maxLength={2000}
+          rows={3}
+          className={inputCls}
+        />
+      </div>
+      {error && <ErrorText>{error}</ErrorText>}
+      {ok && <p className="text-sm text-green-700">Uložené.</p>}
+      <div className="flex justify-end">
+        <Button onClick={save} disabled={busy || (teamIds.length === 0 && otherTeamsCount === 0)}>
+          {busy ? 'Ukladám…' : 'Uložiť'}
+        </Button>
+      </div>
+    </div>
+  );
+}
 
 function PublicConsentPanel({ member }: { member: MemberRow }) {
   const [profile, setProfile] = useState(member.publicProfileConsent ?? false);
