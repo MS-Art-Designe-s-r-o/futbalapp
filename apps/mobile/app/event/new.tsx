@@ -1,9 +1,9 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Alert, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useRouter } from 'expo-router';
-import { addMinutesToHhmm, defaultEventMinutes, SURFACE_CODES, WEEKDAY_SHORT_SK } from '@fkknv/shared';
-import { api } from '@/api';
-import { coachTeams, fetchMe, isStaff, type Me } from '@/auth';
+import { addMinutesToHhmm, defaultEventMinutes, formatEventDateTimeSk, SURFACE_CODES, WEEKDAY_SHORT_SK } from '@fkknv/shared';
+import { api, ApiError } from '@/api';
+import { coachTeams, fetchMe, isGkCoachOnly, isStaff, type Me } from '@/auth';
 import { ui } from '@/theme';
 import { KeyboardScreen } from '@/KeyboardScreen';
 import { fetchPitches, isHhmm, normHhmm, SURFACE_LABELS, toMin, type Pitch } from '@/pitches';
@@ -119,7 +119,21 @@ export default function NewEventScreen() {
     return null;
   }
 
-  async function submit() {
+  // tréning na obsadenú plochu: server vráti 409 PITCH_SHARED → po potvrdení sa odošle znova s allowSharedPitch
+  function askSharedPitch(e: unknown): boolean {
+    if (!(e instanceof ApiError) || e.body.code !== 'PITCH_SHARED') return false;
+    const list = (e.body.conflicts ?? [])
+      .slice(0, 5)
+      .map((c) => `• ${c.teamName} (${formatEventDateTimeSk(c.startAt)})`)
+      .join('\n');
+    Alert.alert('Plocha je rezervovaná', `${e.message}${list ? `\n\n${list}` : ''}`, [
+      { text: 'Zrušiť', style: 'cancel' },
+      { text: 'Rezervovať napriek tomu', onPress: () => void submit(true) },
+    ]);
+    return true;
+  }
+
+  async function submit(allowSharedPitch = false) {
     const problem = validate();
     if (problem) {
       Alert.alert('Skontrolujte údaje', problem);
@@ -136,7 +150,7 @@ export default function NewEventScreen() {
       if (mode === 'training' && recurring) {
         await api('/events/recurring', {
           method: 'POST',
-          body: JSON.stringify({ title, teamId, weekdays, startTime: st, endTime: en || undefined, from, until, ...place }),
+          body: JSON.stringify({ title, teamId, weekdays, startTime: st, endTime: en || undefined, from, until, ...place, allowSharedPitch }),
         });
       } else if (mode === 'tournament') {
         const created = await api<{ id: string }>('/events', {
@@ -157,7 +171,7 @@ export default function NewEventScreen() {
       } else if (mode === 'training') {
         await api('/events', {
           method: 'POST',
-          body: JSON.stringify({ type: 'TRAINING', title, teamId, startAt: `${date}T${st}:00.000Z`, endAt: en ? `${date}T${en}:00.000Z` : undefined, ...place }),
+          body: JSON.stringify({ type: 'TRAINING', title, teamId, startAt: `${date}T${st}:00.000Z`, endAt: en ? `${date}T${en}:00.000Z` : undefined, ...place, allowSharedPitch }),
         });
       } else {
         const team = teams.find((t) => t.id === teamId);
@@ -185,6 +199,7 @@ export default function NewEventScreen() {
       Alert.alert('Hotovo', 'Udalosť bola vytvorená.');
       router.back();
     } catch (e) {
+      if (askSharedPitch(e)) return;
       const msg = e instanceof Error ? e.message : 'Uloženie zlyhalo';
       if (/obsaden/i.test(msg)) {
         setClash(msg);
@@ -210,18 +225,22 @@ export default function NewEventScreen() {
         <Pressable style={chip(mode === 'training')} onPress={() => setMode('training')}>
           <Text style={chipTxt(mode === 'training')}>Tréning</Text>
         </Pressable>
-        <Pressable style={chip(mode === 'match')} onPress={() => setMode('match')}>
-          <Text style={chipTxt(mode === 'match')}>Zápas</Text>
-        </Pressable>
-        <Pressable
-          style={chip(mode === 'tournament')}
-          onPress={() => {
-            setMode('tournament');
-            if (title === 'Tréning') setTitle('');
-          }}
-        >
-          <Text style={chipTxt(mode === 'tournament')}>Turnaj</Text>
-        </Pressable>
+        {!isGkCoachOnly(me) && (
+          <>
+            <Pressable style={chip(mode === 'match')} onPress={() => setMode('match')}>
+              <Text style={chipTxt(mode === 'match')}>Zápas</Text>
+            </Pressable>
+            <Pressable
+              style={chip(mode === 'tournament')}
+              onPress={() => {
+                setMode('tournament');
+                if (title === 'Tréning') setTitle('');
+              }}
+            >
+              <Text style={chipTxt(mode === 'tournament')}>Turnaj</Text>
+            </Pressable>
+          </>
+        )}
       </View>
 
       <Text style={styles.label}>Družstvo</Text>
@@ -398,7 +417,7 @@ export default function NewEventScreen() {
         </>
       )}
 
-      <Pressable style={[styles.submit, busy && { opacity: 0.6 }]} onPress={submit} disabled={busy || !teamId}>
+      <Pressable style={[styles.submit, busy && { opacity: 0.6 }]} onPress={() => void submit()} disabled={busy || !teamId}>
         <Text style={styles.submitText}>{busy ? 'Ukladám…' : 'Vytvoriť'}</Text>
       </Pressable>
     </KeyboardScreen>

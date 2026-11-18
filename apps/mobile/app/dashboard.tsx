@@ -21,7 +21,7 @@ interface EventItem {
   parentEventId?: string | null;
   tournamentOrder?: number | null;
   parent?: { id: string; title: string } | null;
-  team: { id: string; name: string } | null;
+  team: { id: string; name: string; isGoalkeeperGroup?: boolean } | null;
   audienceTeams?: Array<{ id: string; name: string }>;
   match: {
     id: string;
@@ -172,7 +172,7 @@ export default function DashboardScreen() {
       <Pressable style={styles.card} onPress={() => openEvent(item)} disabled={!openable}>
         <View style={styles.badgeRow}>
           <Text style={styles.badge}>
-            {typeLabels[item.type] ?? item.type}
+            {item.type === 'TRAINING' ? (item.team?.isGoalkeeperGroup ? 'Brankársky tréning' : 'Futbalový tréning') : typeLabels[item.type] ?? item.type}
             {item.team ? ` · ${item.team.name}` : ''}
           </Text>
           {item.match?.isFriendly && <Text style={styles.nomBadge}>Priateľský</Text>}

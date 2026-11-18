@@ -24,6 +24,7 @@ export class ApiError extends Error {
   constructor(
     message: string,
     public readonly status: number,
+    public readonly body: { code?: string; conflicts?: Array<{ teamName: string; title: string; startAt: string; endAt: string | null }> } = {},
   ) {
     super(message);
     this.name = 'ApiError';
@@ -41,8 +42,8 @@ export async function api<T>(path: string, options: RequestInit = {}): Promise<T
     },
   });
   if (!response.ok) {
-    const body = (await response.json().catch(() => ({}))) as { message?: string };
-    throw new ApiError(body.message ?? `Chyba servera (${response.status})`, response.status);
+    const body = (await response.json().catch(() => ({}))) as { message?: string; code?: string; conflicts?: Array<{ teamName: string; title: string; startAt: string; endAt: string | null }> };
+    throw new ApiError(body.message ?? `Chyba servera (${response.status})`, response.status, { code: body.code, conflicts: body.conflicts });
   }
   return (await response.json()) as T;
 }
