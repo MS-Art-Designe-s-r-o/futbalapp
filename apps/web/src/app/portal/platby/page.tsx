@@ -689,10 +689,14 @@ interface BankTx {
   counterpartyIban: string | null;
   message: string | null;
   variableSymbol: string | null;
+  specificSymbol?: string | null;
   matchStatus: 'UNMATCHED' | 'MATCHED' | 'MANUAL' | 'IGNORED';
   suggestedMember: { id: string; firstName: string; lastName: string } | null;
   matchedMember: { id: string; firstName: string; lastName: string } | null;
-  matches: Array<{ amountCents: number; paymentObligation: { periodLabel: string } }>;
+  matches: Array<{
+    amountCents: number;
+    paymentObligation: { periodLabel: string; member?: { id: string; firstName: string; lastName: string } };
+  }>;
 }
 interface MemberOpt {
   id: string;
@@ -855,7 +859,16 @@ function PaymentMatching() {
                   <div className="font-medium">{t.counterpartyName ?? '—'}</div>
                   <div className="text-xs text-gray-400">{t.counterpartyIban ?? ''}</div>
                 </td>
-                <td className="px-3 py-3 text-gray-600">{t.message ?? '—'}</td>
+                <td className="px-3 py-3 text-gray-600">
+                  <div>{t.message ?? '—'}</div>
+                  {(t.variableSymbol || t.specificSymbol) && (
+                    <div className="text-xs text-gray-400">
+                      {t.variableSymbol ? `VS ${t.variableSymbol}` : ''}
+                      {t.variableSymbol && t.specificSymbol ? ' · ' : ''}
+                      {t.specificSymbol ? `SS ${t.specificSymbol}` : ''}
+                    </div>
+                  )}
+                </td>
                 <td className="whitespace-nowrap px-3 py-3 text-right font-semibold">
                   {(t.amountCents / 100).toFixed(2)} €
                 </td>
@@ -870,11 +883,32 @@ function PaymentMatching() {
                       <span className="font-medium">
                         {t.matchedMember.lastName} {t.matchedMember.firstName}
                       </span>
-                      {t.matches.length > 0 && (
-                        <div className="text-xs text-gray-400">
-                          {t.matches.map((m) => m.paymentObligation.periodLabel).join(', ')}
-                        </div>
-                      )}
+                      {(() => {
+                        // platba za viac detí: rozdelenie sumy podľa hráčov
+                        const byMember = new Map<string, { name: string; cents: number }>();
+                        for (const m of t.matches) {
+                          const mem = m.paymentObligation.member;
+                          if (!mem) continue;
+                          const cur = byMember.get(mem.id) ?? { name: `${mem.lastName} ${mem.firstName}`, cents: 0 };
+                          cur.cents += m.amountCents;
+                          byMember.set(mem.id, cur);
+                        }
+                        if (byMember.size > 1) {
+                          return (
+                            <div className="mt-1 space-y-0.5 text-xs text-gray-500">
+                              <div className="font-medium text-club-700">Platba za viac detí (VS + SS)</div>
+                              {[...byMember.values()].map((v) => (
+                                <div key={v.name}>
+                                  {v.name}: {(v.cents / 100).toFixed(2)} €
+                                </div>
+                              ))}
+                            </div>
+                          );
+                        }
+                        return t.matches.length > 0 ? (
+                          <div className="text-xs text-gray-400">{t.matches.map((m) => m.paymentObligation.periodLabel).join(', ')}</div>
+                        ) : null;
+                      })()}
                     </div>
                   ) : t.suggestedMember ? (
                     <span className="rounded bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-700">

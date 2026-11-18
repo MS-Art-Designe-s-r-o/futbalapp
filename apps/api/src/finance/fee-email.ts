@@ -88,6 +88,7 @@ ${vsLine}
 ${line('Správa pre prijímateľa', member)}
 </table>
 <div style="${FONT}font-size:13px;line-height:20px;color:#444444;padding-top:8px;">Variabilný symbol (VS) je dátum narodenia hráča + kód predpisu a slúži na automatické spárovanie platby, prosíme ho neprepisovať.</div>
+<div style="${FONT}font-size:13px;line-height:20px;color:#444444;padding-top:8px;">Platíte za viac detí jednou platbou? Uveďte variabilný symbol prvého dieťaťa, do špecifického symbolu dátum narodenia druhého dieťaťa (DDMMRRRR) a sumu za všetky deti spolu. Platbu automaticky rozdelíme.</div>
 </td></tr></table></td></tr>
 <tr><td style="padding:0 32px 28px 32px;${FONT}font-size:14px;line-height:22px;color:#444444;">
 <p style="margin:0 0 10px 0;">Ak ste už uhradili, tento e-mail považujte za bezpredmetný.</p>

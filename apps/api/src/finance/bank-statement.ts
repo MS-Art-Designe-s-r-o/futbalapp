@@ -19,6 +19,9 @@ const HEADER_MAP: Record<string, keyof BankRow | 'bookingDate'> = {
   'nazov partnera': 'counterpartyName',
   suma: 'amountCents',
   vs: 'variableSymbol',
+  ss: 'specificSymbol',
+  'specificky symbol': 'specificSymbol',
+  specificky: 'specificSymbol',
   'doplnujuce informacie': 'message',
   'cislo dokladu': 'externalId',
 };
@@ -83,6 +86,7 @@ export function parseBankStatement(buffer: Buffer): BankRow[] {
       date: date.toISOString(),
       amountCents: Math.round(amount * 100),
       variableSymbol: toText(raw.variableSymbol),
+      specificSymbol: toText(raw.specificSymbol),
       counterpartyIban: toText(raw.counterpartyIban),
       counterpartyName: toText(raw.counterpartyName),
       message: toText(raw.message),

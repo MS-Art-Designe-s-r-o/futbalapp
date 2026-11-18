@@ -16,6 +16,8 @@ describe('buildFeeEmail', () => {
     expect(html).toContain('25,00 €');
     expect(html).toContain('september 2026');
     expect(html).toContain('15.9.2026');
+    expect(html).toContain('Platíte za viac detí jednou platbou?');
+    expect(html).toContain('špecifického symbolu');
   });
   it('escapuje HTML', () => {
     const { html } = buildFeeEmail({ ...base, memberName: '<script>x</script>', planName: 'A&B' });

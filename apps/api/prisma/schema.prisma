@@ -526,6 +526,8 @@ model BankTransaction {
   amountCents      Int
   currency         String          @default("EUR")
   variableSymbol   String?
+  /// Špecifický symbol (pri platbe za viac detí: dátum narodenia druhého dieťaťa DDMMRRRR)
+  specificSymbol   String?
   counterpartyIban String?
   counterpartyName String?
   message          String?

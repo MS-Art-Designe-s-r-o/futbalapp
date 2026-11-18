@@ -5,6 +5,7 @@ import { decideVsMatch, nextPlanVsCode, obligationVariableSymbol } from './vs-he
 import { PrismaService } from '../prisma/prisma.service';
 import { parseBankStatement } from './bank-statement';
 import { aggregateCosts, filterSortDebits, planMatch, validateCostFields } from './cost-helpers';
+import { orderMultiChildObligations, parseSpecificSymbolBirthDate, splitAmount } from './multi-child';
 import { buildIndex, suggestMemberId } from './name-match';
 
 export interface BankRow {
@@ -12,6 +13,7 @@ export interface BankRow {
   date: string; // ISO
   amountCents: number;
   variableSymbol?: string;
+  specificSymbol?: string;
   counterpartyIban?: string;
   counterpartyName?: string;
   message?: string;
@@ -249,6 +251,7 @@ export class FinanceService {
             date: new Date(row.date),
             amountCents: row.amountCents,
             variableSymbol: row.variableSymbol,
+            specificSymbol: row.specificSymbol,
             counterpartyIban: row.counterpartyIban,
             counterpartyName: row.counterpartyName,
             message: row.message,
@@ -348,7 +351,9 @@ export class FinanceService {
         }
       }
       if (memberId) {
-        await this.allocateToMember(tx, memberId, 'AUTO', preferVs);
+        const sibling = await this.findSiblingBySpecificSymbol(tx, memberId);
+        if (sibling) await this.allocateMultiChild(tx, memberId, sibling, preferVs);
+        else await this.allocateToMember(tx, memberId, 'AUTO', preferVs);
         matched++;
         continue;
       }
@@ -361,6 +366,69 @@ export class FinanceService {
       }
     }
     return { matchedTransactions: matched, suggestedTransactions: suggested };
+  }
+
+  /**
+   * Platba za viac detí: špecifický symbol = dátum narodenia druhého dieťaťa.
+   * Vráti súrodenca B (nie A, rovnaký dátum narodenia, spoločný zákonný zástupca), ak je práve jeden.
+   */
+  private async findSiblingBySpecificSymbol(tx: BankTransaction, memberAId: string) {
+    const bd = parseSpecificSymbolBirthDate(tx.specificSymbol);
+    if (!bd) return null;
+    const guardianUserIds = (
+      await this.prisma.guardian.findMany({ where: { memberId: memberAId }, select: { userId: true } })
+    ).map((g) => g.userId);
+    if (guardianUserIds.length === 0) return null;
+    const candidates = await this.prisma.member.findMany({
+      where: { birthDate: bd, id: { not: memberAId }, guardians: { some: { userId: { in: guardianUserIds } } } },
+      select: { id: true, birthDate: true },
+    });
+    return candidates.length === 1 && candidates[0]!.birthDate ? { id: candidates[0]!.id, birthDate: candidates[0]!.birthDate } : null;
+  }
+
+  /** Rozúčtuje jednu platbu na povinnosti dvoch súrodencov (A = prvé dieťa podľa VS, B = podľa SS). */
+  private async allocateMultiChild(
+    tx: BankTransaction,
+    memberAId: string,
+    b: { id: string; birthDate: Date },
+    preferVs?: string,
+  ) {
+    const open = (memberId: string) =>
+      this.prisma.paymentObligation.findMany({
+        where: { memberId, status: { in: ['PENDING', 'PARTIAL', 'OVERDUE'] } },
+        orderBy: { dueDate: 'asc' },
+      });
+    const [aObl, bObl] = [await open(memberAId), await open(b.id)];
+    const toOpen = (o: (typeof aObl)[number]) => ({
+      id: o.id,
+      memberId: o.memberId,
+      variableSymbol: o.variableSymbol,
+      openCents: o.amountCents - o.paidCents,
+    });
+    const vs = preferVs ?? (tx.variableSymbol ?? '').trim().replace(/\s+/g, '');
+    const ordered = orderMultiChildObligations(vs, aObl.map(toOpen), bObl.map(toOpen), b.birthDate);
+    const { allocations, remainingCents } = splitAmount(tx.amountCents, ordered);
+    const byId = new Map([...aObl, ...bObl].map((o) => [o.id, o]));
+    for (const al of allocations) {
+      const o = byId.get(al.obligationId)!;
+      const paid = o.paidCents + al.cents;
+      await this.prisma.$transaction([
+        this.prisma.paymentMatch.upsert({
+          where: { bankTransactionId_paymentObligationId: { bankTransactionId: tx.id, paymentObligationId: o.id } },
+          create: { bankTransactionId: tx.id, paymentObligationId: o.id, amountCents: al.cents, matchedBy: 'AUTO' },
+          update: { amountCents: al.cents, matchedBy: 'AUTO' },
+        }),
+        this.prisma.paymentObligation.update({
+          where: { id: o.id },
+          data: { paidCents: paid, status: paid >= o.amountCents ? 'PAID' : 'PARTIAL' },
+        }),
+      ]);
+    }
+    await this.prisma.bankTransaction.update({
+      where: { id: tx.id },
+      data: { matchedMemberId: memberAId, suggestedMemberId: null, matchStatus: 'MATCHED' },
+    });
+    return { allocatedCents: tx.amountCents - remainingCents, remainingCents };
   }
 
   /** Rozúčtuje sumu pohybu na otvorené povinnosti člena (od najstaršej). */
@@ -469,7 +537,14 @@ export class FinanceService {
       include: {
         suggestedMember: { select: { id: true, firstName: true, lastName: true } },
         matchedMember: { select: { id: true, firstName: true, lastName: true } },
-        matches: { select: { amountCents: true, paymentObligation: { select: { periodLabel: true } } } },
+        matches: {
+          select: {
+            amountCents: true,
+            paymentObligation: {
+              select: { periodLabel: true, member: { select: { id: true, firstName: true, lastName: true } } },
+            },
+          },
+        },
       },
       orderBy: { date: 'desc' },
       take: 500,
