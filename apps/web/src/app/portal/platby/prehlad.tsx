@@ -188,6 +188,7 @@ export default function PrehladTab() {
 
       {hasData && (
         <>
+          <ProfitCard income={(t.paidCents ?? 0) + (t.otherIncomeCents ?? 0)} costs={t.expensesPaidCents ?? 0} />
           <Card className="space-y-2">
             <h2 className="font-semibold text-club-800">{month ? 'Priebeh po dňoch' : 'Priebeh po mesiacoch'}</h2>
             <Legend
@@ -243,6 +244,44 @@ export default function PrehladTab() {
         </>
       )}
     </div>
+  );
+}
+
+/** Pomer celkových nákladov a zisku: príjmy = uhradené predpisy + iné prijaté platby, náklady = uhradené náklady. */
+function ProfitCard({ income, costs }: { income: number; costs: number }) {
+  const profit = income - costs;
+  const loss = profit < 0;
+  const costPct = income > 0 ? (costs / income) * 100 : null;
+  const profitPct = income > 0 ? (profit / income) * 100 : null;
+  // pás má vždy 100 % šírky: náklady + zisk (pri strate náklady do výšky príjmov + červený previs)
+  const total = Math.max(income, costs, 1);
+  const costW = (Math.min(costs, income) / total) * 100;
+  const profitW = (Math.max(profit, 0) / total) * 100;
+  const overW = (Math.max(-profit, 0) / total) * 100;
+  const fmt = (v: number | null) => (v === null ? '—' : `${v.toFixed(1).replace('.', ',')} %`);
+  return (
+    <Card className="space-y-3">
+      <h2 className="font-semibold text-club-800">Náklady a zisk</h2>
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+        <Kpi label="Príjmy" value={eur(income)} sub="uhradené predpisy + iné platby" tone="text-green-700" />
+        <Kpi label="Celkové náklady" value={eur(costs)} sub="uhradené náklady" tone="text-orange-700" />
+        <Kpi label={loss ? 'Strata' : 'Zisk'} value={eur(profit)} tone={loss ? 'text-red-700' : 'text-green-700'} sub={`marža ${fmt(profitPct)}`} />
+        <Kpi label="Pomer náklady : príjmy" value={fmt(costPct)} sub={costPct !== null && costPct > 100 ? 'náklady prevyšujú príjmy' : 'podiel nákladov z príjmov'} tone={costPct !== null && costPct > 100 ? 'text-red-700' : undefined} />
+      </div>
+      <div role="img" aria-label={`Náklady ${fmt(costPct)} z príjmov, zisk ${fmt(profitPct)}`}>
+        <div className="flex h-6 w-full overflow-hidden rounded bg-club-100">
+          <div style={{ width: `${costW}%`, background: C.expense }} title="Náklady" />
+          {profitW > 0 && <div style={{ width: `${profitW}%`, background: C.paid }} title="Zisk" />}
+          {overW > 0 && <div style={{ width: `${overW}%`, background: '#dc2626' }} title="Strata" />}
+        </div>
+        <div className="mt-2 flex flex-wrap gap-x-5 gap-y-1 text-xs text-gray-600">
+          <span><span className="mr-1 inline-block h-2.5 w-2.5 rounded-sm" style={{ background: C.expense }} />Náklady</span>
+          {!loss && <span><span className="mr-1 inline-block h-2.5 w-2.5 rounded-sm" style={{ background: C.paid }} />Zisk</span>}
+          {loss && <span><span className="mr-1 inline-block h-2.5 w-2.5 rounded-sm" style={{ background: '#dc2626' }} />Strata (náklady nad príjmy)</span>}
+        </div>
+      </div>
+      {income <= 0 && costs > 0 && <p className="text-xs text-gray-500">V období nie sú žiadne príjmy, pomer sa nedá vyčísliť.</p>}
+    </Card>
   );
 }
 
