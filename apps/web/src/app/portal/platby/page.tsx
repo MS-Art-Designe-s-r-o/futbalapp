@@ -6,6 +6,7 @@ import { Button, Card, ErrorText, Modal, inputCls, labelCls } from '@/components
 import { FEE_PRESETS, birthDateVariableSymbol } from '@fkknv/shared';
 import PrehladTab from './prehlad';
 import NakladyTab from './naklady';
+import { SendFeeModal } from './send-fee';
 
 interface Debtor {
   member: {
@@ -254,6 +255,7 @@ function Plans() {
   const [editPlan, setEditPlan] = useState<FeePlan | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [genOpen, setGenOpen] = useState(false);
+  const [sendPlan, setSendPlan] = useState<FeePlan | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -338,6 +340,9 @@ function Plans() {
                 <td className="px-4 py-3">{p.assignments.length}</td>
                 <td className="px-4 py-3 text-right">
                   <div className="flex justify-end gap-3">
+                    <button onClick={() => setSendPlan(p)} className="text-club-600 hover:underline">
+                      Odoslať e-mailom
+                    </button>
                     <button onClick={() => setEditPlan(p)} className="text-club-600 hover:underline">
                       Upraviť
                     </button>
@@ -367,6 +372,8 @@ function Plans() {
           </tbody>
         </table>
       </div>
+
+      {sendPlan && <SendFeeModal plan={sendPlan} onClose={() => setSendPlan(null)} />}
 
       {open && (
         <FeePlanModal

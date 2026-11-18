@@ -504,6 +504,8 @@ model PaymentObligation {
   variableSymbol  String
   dueDate         DateTime
   status          PaymentStatus @default(PENDING)
+  /// Kedy bol predpis naposledy odoslaný e-mailom rodičovi/hráčovi
+  emailedAt       DateTime?
   createdAt       DateTime      @default(now())
 
   feeAssignment FeeAssignment  @relation(fields: [feeAssignmentId], references: [id], onDelete: Cascade)

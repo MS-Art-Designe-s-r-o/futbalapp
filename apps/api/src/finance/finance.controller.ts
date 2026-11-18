@@ -16,6 +16,7 @@ import { FileInterceptor } from '@nestjs/platform-express';
 import { z } from 'zod';
 import { FinanceService, type BankRow } from './finance.service';
 import { DunningService } from './dunning.service';
+import { FeeMailService } from './fee-mail.service';
 import { Roles } from '../auth/roles.decorator';
 import { CurrentUser, type AuthUser } from '../auth/current-user.decorator';
 import { ZodValidationPipe } from '../common/zod.pipe';
@@ -34,6 +35,8 @@ const createFeePlanSchema = z.object({
 });
 
 const assignMembersSchema = z.object({ memberIds: z.array(z.string().min(1)).min(1) });
+
+const feeSendSchema = z.object({ obligationIds: z.array(z.string().min(1)).min(1) });
 
 const dunningSendSchema = z.object({ memberIds: z.array(z.string().min(1)).min(1) });
 
@@ -104,6 +107,7 @@ export class FinanceController {
   constructor(
     private readonly financeService: FinanceService,
     private readonly dunningService: DunningService,
+    private readonly feeMailService: FeeMailService,
     private readonly prisma: PrismaService,
   ) {}
 
@@ -259,6 +263,18 @@ export class FinanceController {
   @Roles('ADMIN', 'MANAGER')
   unassignMember(@Param('id') id: string, @Param('memberId') memberId: string) {
     return this.financeService.unassignMember(id, memberId);
+  }
+
+  @Get('fee-plans/:id/send-preview')
+  @Roles('ADMIN', 'MANAGER')
+  feeSendPreview(@Param('id') id: string, @Query('period') period?: string) {
+    return this.feeMailService.preview(id, period);
+  }
+
+  @Post('fee-plans/:id/send')
+  @Roles('ADMIN', 'MANAGER')
+  feeSend(@Param('id') id: string, @Body(new ZodValidationPipe(feeSendSchema)) body: z.infer<typeof feeSendSchema>) {
+    return this.feeMailService.send(id, body.obligationIds);
   }
 
   @Get('fee-plans')

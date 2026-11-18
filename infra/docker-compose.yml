@@ -37,6 +37,9 @@ services:
       CORS_ORIGIN: https://fkknv.sk
       EMAIL_FROM: ${EMAIL_FROM:-FK Košická Nová Ves <noreply@fkknv.sk>}
       RESEND_API_KEY: ${RESEND_API_KEY:-}
+      # Bankový účet klubu pre e-maily s predpismi — voliteľné
+      CLUB_IBAN: ${CLUB_IBAN:-}
+      CLUB_ACCOUNT_NAME: ${CLUB_ACCOUNT_NAME:-}
       # Veo (automatické hľadanie videa zo zápasu) — voliteľné
       VEO_CLIENT_ID: ${VEO_CLIENT_ID:-}
       VEO_USERNAME: ${VEO_USERNAME:-}

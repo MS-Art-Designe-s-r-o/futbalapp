@@ -70,6 +70,7 @@ chmod 600 .env
 
 `JWT_SECRET` vygenerujete napr.: `openssl rand -base64 48`.
 `RESEND_API_KEY` sa dá doplniť neskôr (bez neho appka funguje, e-maily sa len logujú).
+`CLUB_IBAN` (a voliteľne `CLUB_ACCOUNT_NAME`) v `infra/.env` je účet klubu, ktorý sa uvádza v e-mailoch s predpismi poplatkov; bez neho e-mail napíše „Číslo účtu vám oznámi klub“.
 
 ---
 
