@@ -30,6 +30,9 @@ interface RegRequest {
   consentPhotos: boolean;
   note: string | null;
   createdAt: string;
+  status?: 'PENDING' | 'APPROVED' | 'REJECTED';
+  reviewedAt?: string | null;
+  createdMemberId?: string | null;
   infoRequestedAt?: string | null;
   infoReceivedAt?: string | null;
   infoMotherClub?: string | null;
@@ -81,7 +84,105 @@ function stripDia(s: string): string {
   return s.normalize('NFD').replace(/\p{Diacritic}/gu, '').toLowerCase();
 }
 
+const STATUS_LABEL: Record<string, { label: string; cls: string }> = {
+  PENDING: { label: 'Čaká', cls: 'bg-amber-100 text-amber-800' },
+  APPROVED: { label: 'Schválená', cls: 'bg-green-100 text-green-800' },
+  REJECTED: { label: 'Zamietnutá', cls: 'bg-red-100 text-red-800' },
+};
+
+/** História registrácií — schválené / zamietnuté / všetky, s vyhľadávaním. */
+function RegistrationHistory() {
+  const [filter, setFilter] = useState<'ALL' | 'APPROVED' | 'REJECTED'>('ALL');
+  const [q, setQ] = useState('');
+  const [rows, setRows] = useState<RegRequest[] | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    const t = setTimeout(() => {
+      const params = new URLSearchParams();
+      if (filter !== 'ALL') params.set('status', filter);
+      if (q.trim()) params.set('q', q.trim());
+      api<RegRequest[]>(`/registration/history?${params}`)
+        .then((r) => {
+          setRows(r.filter((x) => x.status !== 'PENDING'));
+          setError(null);
+        })
+        .catch((e) => setError(e instanceof Error ? e.message : 'Načítanie zlyhalo'));
+    }, 250);
+    return () => clearTimeout(t);
+  }, [filter, q]);
+
+  return (
+    <div className="space-y-4">
+      <div className="flex flex-wrap items-center gap-2">
+        {(
+          [
+            ['ALL', 'Všetky'],
+            ['APPROVED', 'Schválené'],
+            ['REJECTED', 'Zamietnuté'],
+          ] as const
+        ).map(([k, label]) => (
+          <button
+            key={k}
+            type="button"
+            onClick={() => setFilter(k)}
+            className={`rounded-md px-3 py-1.5 text-sm ${filter === k ? 'bg-club-600 text-white' : 'bg-club-50 text-club-700'}`}
+          >
+            {label}
+          </button>
+        ))}
+        <input
+          value={q}
+          onChange={(e) => setQ(e.target.value)}
+          placeholder="Hľadať meno alebo e-mail…"
+          className={`${inputCls} ml-auto max-w-xs`}
+        />
+      </div>
+      <ErrorText>{error}</ErrorText>
+      {rows && rows.length === 0 && !error && <Card className="text-sm text-gray-500">Žiadne registrácie.</Card>}
+      <div className="space-y-2">
+        {(rows ?? []).map((r) => {
+          const st = STATUS_LABEL[r.status ?? 'PENDING']!;
+          const who =
+            r.applicantType === 'PARENT'
+              ? `${r.parentFirstName ?? ''} ${r.parentLastName ?? ''}`.trim()
+              : `${r.childFirstName ?? ''} ${r.childLastName ?? ''}`.trim();
+          return (
+            <Card key={r.id}>
+              <div className="flex flex-wrap items-start justify-between gap-3 text-sm">
+                <div className="min-w-0 space-y-0.5">
+                  <p className="text-base font-semibold text-club-900">
+                    {who || '—'}{' '}
+                    <span className="rounded bg-club-100 px-1.5 py-0.5 text-xs font-normal text-club-700">
+                      {r.applicantType === 'PARENT' ? 'konto rodiča' : r.applicantType === 'ADULT' ? 'dospelý hráč' : 'dieťa'}
+                    </span>
+                  </p>
+                  {r.applicantType !== 'PARENT' && r.parentFirstName && (
+                    <p className="text-gray-600">
+                      Rodič: {r.parentFirstName} {r.parentLastName}
+                    </p>
+                  )}
+                  {(r.parentEmail || r.playerEmail) && (
+                    <p className="text-gray-600">{[r.parentEmail, r.parentPhone, r.playerEmail].filter(Boolean).join(' · ')}</p>
+                  )}
+                  <p className="text-xs text-gray-400">
+                    Prijaté {new Date(r.createdAt).toLocaleDateString('sk-SK')}
+                    {r.reviewedAt ? ` · vybavené ${new Date(r.reviewedAt).toLocaleDateString('sk-SK')}` : ''}
+                    {r.status === 'APPROVED' && r.createdMemberId ? ' · člen vytvorený' : ''}
+                  </p>
+                </div>
+                <span className={`rounded px-2 py-1 text-xs font-medium ${st.cls}`}>{st.label}</span>
+              </div>
+            </Card>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 export default function RegistrationsPage() {
+  const [tab, setTab] = useState<'pending' | 'history'>('pending');
   const [requests, setRequests] = useState<RegRequest[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
@@ -128,7 +229,28 @@ export default function RegistrationsPage() {
 
   return (
     <div className="space-y-5">
-      <h1 className="text-2xl font-bold text-club-900">Registrácie na schválenie</h1>
+      <h1 className="text-2xl font-bold text-club-900">Registrácie</h1>
+      <div className="flex gap-2 border-b border-club-100">
+        {(
+          [
+            ['pending', `Na schválenie${requests.length ? ` (${requests.length})` : ''}`],
+            ['history', 'Doterajšie registrácie'],
+          ] as const
+        ).map(([k, label]) => (
+          <button
+            key={k}
+            type="button"
+            onClick={() => setTab(k)}
+            className={`px-4 py-2 text-sm font-medium ${
+              tab === k ? 'border-b-2 border-club-600 text-club-800' : 'text-gray-500 hover:text-club-700'
+            }`}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+      {tab === 'history' && <RegistrationHistory />}
+      {tab === 'pending' && (<>
       <ErrorText>{error}</ErrorText>
       {approved && <ApprovedBanner result={approved} onClose={() => setApproved(null)} />}
       {requests.length === 0 && !error && (
@@ -202,6 +324,7 @@ export default function RegistrationsPage() {
         Po schválení sa vytvorí člen, rodičovský účet a hráč sa zaradí do družstva podľa ročníka. Ak je hráč už členom
         (import z futbalnetu alebo skoršia registrácia), priradí sa k rodičovi bez vytvorenia duplikátu.
       </p>
+      </>)}
 
       {detail && (
         <RegDetailModal

@@ -97,6 +97,27 @@ export class RegistrationService {
     return rows.map(({ infoToken: _token, ...r }) => ({ ...r, hasPhoto: !!r.photoDataUrl }));
   }
 
+  /** História registrácií (schválené / zamietnuté / všetky), od najnovších; bez fotky a tajného tokenu. */
+  async listHistory(status?: string, q?: string) {
+    const st = status === 'APPROVED' || status === 'REJECTED' || status === 'PENDING' ? status : undefined;
+    const rows = await this.prisma.registrationRequest.findMany({
+      where: { ...(st ? { status: st } : {}) },
+      orderBy: { createdAt: 'desc' },
+      take: 500,
+    });
+    const norm = (v: string | null | undefined) => (v ?? '').normalize('NFD').replace(/\p{Diacritic}/gu, '').toLowerCase();
+    const needle = norm(q?.trim());
+    return rows
+      .map(({ infoToken: _t, photoDataUrl, ...r }) => ({ ...r, hasPhoto: !!photoDataUrl }))
+      .filter(
+        (r) =>
+          !needle ||
+          norm(
+            [r.childFirstName, r.childLastName, r.parentFirstName, r.parentLastName, r.parentEmail, r.playerEmail].join(' '),
+          ).includes(needle),
+      );
+  }
+
   // ---------------------------------------------------------------------
   // Doplnenie údajov o dieťati rodičom cez verejný odkaz
   // ---------------------------------------------------------------------

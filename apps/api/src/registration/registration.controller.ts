@@ -59,6 +59,13 @@ export class RegistrationController {
     return this.registrationService.requestInfo(id, body?.message);
   }
 
+  /** História: ?status=APPROVED|REJECTED|PENDING (bez = všetky) &q=hľadaný text */
+  @Get('history')
+  @Roles('ADMIN', 'MANAGER')
+  history(@Query('status') status?: string, @Query('q') q?: string) {
+    return this.registrationService.listHistory(status, q);
+  }
+
   @Get('pending')
   @Roles('ADMIN', 'MANAGER')
   listPending() {
