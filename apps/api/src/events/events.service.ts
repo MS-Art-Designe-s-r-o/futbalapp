@@ -164,7 +164,7 @@ export class EventsService {
   private async assertPitchFree(
     pitchId: string,
     slots: Array<{ startAt: Date; endAt?: Date | null }>,
-    opts: { excludeId?: string; shareable?: boolean; allowShared?: boolean } = {},
+    opts: { excludeId?: string; shareable?: boolean; allowShared?: boolean; goalkeeper?: boolean } = {},
   ): Promise<SharedClash[]> {
     const DEFAULT_MS = 90 * 60_000;
     const range = slots.map((s) => ({ s: s.startAt.getTime(), e: (s.endAt ?? new Date(s.startAt.getTime() + DEFAULT_MS)).getTime() }));
@@ -186,6 +186,21 @@ export class EventsService {
     const list = [...clashes.values()].sort((a, b) => a.startAt.getTime() - b.startAt.getTime());
     // tréning sa dá na obsadenú plochu rezervovať aj napriek prekryvu (aj so zápasom) — po potvrdení
     const sharable = !!opts.shareable;
+    // brankársky tréning má výnimku: smie na plochu aj pri akomkoľvek inom tréningu bez potvrdenia;
+    // pri zápase alebo turnaji na ploche sa nerezervuje
+    if (opts.goalkeeper) {
+      const blocker = list.find((c) => c.type === 'MATCH' || c.type === 'TOURNAMENT');
+      if (blocker) {
+        throw new BadRequestException(`Plocha je v tom čase obsadená zápasom alebo turnajom (${blocker.title}, ${formatEventDateTimeSk(blocker.startAt)})`);
+      }
+      return list.map((c) => ({
+        teamId: c.teamId ?? '',
+        teamName: c.team?.name ?? c.title,
+        title: c.title,
+        startAt: c.startAt,
+        endAt: c.endAt,
+      }));
+    }
     if (!sharable) {
       const c = list[0]!;
       throw new BadRequestException(`Plocha je v tom čase obsadená (${c.title}, ${formatEventDateTimeSk(c.startAt)})`);
@@ -297,11 +312,18 @@ export class EventsService {
     const ids = input.type === 'TRAINING' ? [...new Set(input.teamIds?.length ? input.teamIds : input.teamId ? [input.teamId] : [])] : [];
     if (ids.length <= 1) return this.createOne({ ...input, teamId: ids[0] ?? input.teamId }, createdById, isDemo);
     // tréning pre viac družstiev: každé má vlastnú udalosť (dochádzka, e-maily); plocha sa overí raz
-    for (const id of ids) await this.resolveTeam(id);
+    const multiTeams = [];
+    for (const id of ids) multiTeams.push(await this.resolveTeam(id));
     const pitch = await this.resolvePitch(input.pitchId);
     this.assertEndAfterStart(input.startAt, input.endAt, !!pitch);
     const slots = [{ startAt: input.startAt, endAt: input.endAt }];
-    const clashes = pitch ? await this.assertPitchFree(pitch.id, slots, { shareable: true, allowShared: input.allowSharedPitch }) : [];
+    const clashes = pitch
+      ? await this.assertPitchFree(pitch.id, slots, {
+          shareable: true,
+          allowShared: input.allowSharedPitch,
+          goalkeeper: multiTeams.every((t) => !!t?.isGoalkeeperGroup),
+        })
+      : [];
     let first;
     for (const id of ids) {
       const ev = await this.createOne({ ...input, teamId: id, teamIds: undefined }, createdById, isDemo, true);
@@ -326,7 +348,11 @@ export class EventsService {
     // zdieľanie plochy sa ponúka len pri tréningu; zápas pri obsadenej ploche odmietnuť
     const clashes =
       pitch && !skipPitchCheck
-        ? await this.assertPitchFree(pitch.id, slots, { shareable: input.type === 'TRAINING', allowShared: input.allowSharedPitch })
+        ? await this.assertPitchFree(pitch.id, slots, {
+            shareable: input.type === 'TRAINING',
+            allowShared: input.allowSharedPitch,
+            goalkeeper: input.type === 'TRAINING' && !!team?.isGoalkeeperGroup,
+          })
         : [];
 
     // logo súpera z registra klubov + doplnenie nového súpera do registra
@@ -424,7 +450,11 @@ export class EventsService {
     for (const occ of occurrences) this.assertEndAfterStart(occ.startAt, occ.endAt, !!pitch);
     const clashes =
       pitch && !skipPitchCheck
-        ? await this.assertPitchFree(pitch.id, occurrences, { shareable: true, allowShared: input.allowSharedPitch })
+        ? await this.assertPitchFree(pitch.id, occurrences, {
+            shareable: true,
+            allowShared: input.allowSharedPitch,
+            goalkeeper: !!team.isGoalkeeperGroup,
+          })
         : [];
     const recurrenceGroupId = randomUUID();
 
@@ -460,6 +490,7 @@ export class EventsService {
     // zmena typu tréningu: futbalový ↔ brankársky = prepnutie družstva udalosti
     // (bežné družstvo ↔ skupina „… Brankári“ rovnakej kategórie alebo „Brankári (všetci)“)
     let newTeamId: string | undefined;
+    let targetIsGk = false;
     if (input.teamId && input.teamId !== event.teamId) {
       if (event.type !== 'TRAINING') throw new BadRequestException('Družstvo možno meniť len pri tréningu');
       const [oldTeam, newTeam] = await Promise.all([
@@ -474,6 +505,9 @@ export class EventsService {
       }
       if (!isStaff(user) && !sameCategory && !toGk) throw new ForbiddenException('Tréning nemôžete presunúť do tohto družstva');
       newTeamId = newTeam.id;
+      targetIsGk = !!newTeam.isGoalkeeperGroup;
+    } else if (event.type === 'TRAINING' && event.teamId) {
+      targetIsGk = !!(await this.prisma.team.findUnique({ where: { id: event.teamId } }))?.isGoalkeeperGroup;
     }
     const pitch = await this.resolvePitch(input.pitchId);
     const effectivePitchId = pitch ? pitch.id : input.pitchId === undefined ? event.pitchId : null;
@@ -490,10 +524,11 @@ export class EventsService {
         excludeId: eventId,
         shareable: event.type === 'TRAINING',
         allowShared: input.allowSharedPitch,
+        goalkeeper: event.type === 'TRAINING' && targetIsGk,
       });
-      if (clashes.length > 0 && event.teamId) {
+      if (clashes.length > 0 && (newTeamId ?? event.teamId)) {
         const p = pitch ?? (await this.prisma.pitch.findUnique({ where: { id: effectivePitchId } }));
-        if (p) void this.notifySharedPitch(clashes, p.name, [event.teamId], [{ startAt: newStart, endAt: newEnd }]).catch(() => undefined);
+        if (p) void this.notifySharedPitch(clashes, p.name, [(newTeamId ?? event.teamId)!], [{ startAt: newStart, endAt: newEnd }]).catch(() => undefined);
       }
     }
     const updated = await this.prisma.event.update({

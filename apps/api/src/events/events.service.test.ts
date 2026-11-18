@@ -133,3 +133,34 @@ describe('zmena typu tréningu (futbalový ↔ brankársky)', () => {
     await expect(service.update('e1', { teamId: 'x1' } as never, coach)).rejects.toMatchObject({ status: 403 });
   });
 });
+
+describe('brankársky tréning: výnimka pri rezervácii plochy', () => {
+  const clash = (type: string) => ({
+    id: 'x1', type, teamId: 't9', team: { name: 'U11' }, title: 'Iná udalosť',
+    startAt: new Date('2030-01-01T10:30:00Z'), endAt: new Date('2030-01-01T11:30:00Z'),
+  });
+  const gk = { ...base, type: 'TRAINING' as const, teamId: 'g1' };
+  function makeGk() {
+    const m = make();
+    m.prisma.team.findUnique = vi.fn(async () => ({ id: 'g1', name: 'U10 Brankári', isGoalkeeperGroup: true }) as never);
+    (m.prisma as never as Record<string, unknown>).userRole = { findMany: vi.fn(async () => []) };
+    (m.prisma as never as Record<string, unknown>).team = { findUnique: m.prisma.team.findUnique, findMany: vi.fn(async () => []) };
+    return m;
+  }
+
+  it('pri inom tréningu sa vytvorí bez potvrdenia', async () => {
+    const { service, prisma } = makeGk();
+    prisma.event.findMany.mockResolvedValue([clash('TRAINING')] as never);
+    await service.create(gk as never, 'u1');
+    expect(prisma.event.create).toHaveBeenCalled();
+  });
+
+  it('pri zápase alebo turnaji na ploche sa odmietne (400)', async () => {
+    for (const type of ['MATCH', 'TOURNAMENT']) {
+      const { service, prisma } = makeGk();
+      prisma.event.findMany.mockResolvedValue([clash(type)] as never);
+      await expect(service.create({ ...gk, allowSharedPitch: true } as never, 'u1')).rejects.toMatchObject({ status: 400 });
+      expect(prisma.event.create).not.toHaveBeenCalled();
+    }
+  });
+});

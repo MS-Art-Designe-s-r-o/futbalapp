@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { SURFACE_CODES, SURFACE_LABELS_SK, addMinutesToHhmm } from '@fkknv/shared';
-import { api } from '@/lib/api';
+import { api, ApiError } from '@/lib/api';
 import { TrainingIcon } from '@/components/training-icon';
 import { Button, ErrorText, Modal, inputCls, labelCls } from '@/components/ui';
 
@@ -63,6 +63,7 @@ export function EventAdminActions({
   const [surfaceVal, setSurfaceVal] = useState(surface ?? '');
   const [opponentVal, setOpponentVal] = useState(opponent ?? '');
   const [clubs, setClubs] = useState<Array<{ id: string; name: string }>>([]);
+  const [shared, setShared] = useState<{ message: string; conflicts: Array<{ teamName: string; title: string; startAt: string }> } | null>(null);
   const [moveOpen, setMoveOpen] = useState(false);
   const [allTeams, setAllTeams] = useState<Array<{ id: string; name: string; isGoalkeeperGroup?: boolean; teamCategory: { code: string } }>>([]);
   const [gkType, setGkType] = useState(!!trainingTeam?.isGoalkeeperGroup);
@@ -111,10 +112,11 @@ export function EventAdminActions({
 
   const endInvalid = !!time && !!endTime && endTime <= time;
 
-  async function save() {
+  async function save(allowShared = false) {
     if (endInvalid) return setError('Koniec musí byť po začiatku');
     setBusy(true);
     setError(null);
+    setShared(null);
     try {
       const startMs = Date.parse(`${date}T${time}:00Z`);
       const body: Record<string, unknown> = {
@@ -132,6 +134,7 @@ export function EventAdminActions({
       }
       if (newTitle) body.title = newTitle;
       if (trainingTeam && teamVal && teamVal !== trainingTeam.id) body.teamId = teamVal;
+      if (allowShared) body.allowSharedPitch = true;
       if (endTime) {
         body.endAt = new Date(Date.parse(`${date}T${endTime}:00Z`)).toISOString();
       } else if (endAt) {
@@ -142,6 +145,10 @@ export function EventAdminActions({
       setMoveOpen(false);
       onChanged();
     } catch (e) {
+      if (e instanceof ApiError && e.body.code === 'PITCH_SHARED') {
+        setShared({ message: e.message, conflicts: e.body.conflicts ?? [] });
+        return;
+      }
       setError(e instanceof Error ? e.message : 'Úprava zlyhala');
     } finally {
       setBusy(false);
@@ -318,11 +325,31 @@ export function EventAdminActions({
             </select>
           </div>
           <ErrorText>{error}</ErrorText>
+          {shared && (
+            <div className="rounded border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">
+              <p className="font-medium">{shared.message}</p>
+              <ul className="mt-1 list-disc pl-5">
+                {shared.conflicts.slice(0, 5).map((c, i) => (
+                  <li key={i}>
+                    {c.teamName} — {c.title}, {new Date(c.startAt).toLocaleString('sk-SK', { timeZone: 'UTC', dateStyle: 'short', timeStyle: 'short' })}
+                  </li>
+                ))}
+              </ul>
+              <div className="mt-2 flex gap-2">
+                <Button variant="ghost" onClick={() => setShared(null)}>
+                  Zrušiť
+                </Button>
+                <Button onClick={() => save(true)} disabled={busy}>
+                  Rezervovať napriek tomu
+                </Button>
+              </div>
+            </div>
+          )}
           <div className="flex justify-end gap-2">
             <Button variant="ghost" onClick={() => setMoveOpen(false)}>
               Späť
             </Button>
-            <Button onClick={save} disabled={busy || !date || !time || endInvalid}>
+            <Button onClick={() => save()} disabled={busy || !date || !time || endInvalid}>
               {busy ? 'Ukladám…' : 'Uložiť'}
             </Button>
           </div>
