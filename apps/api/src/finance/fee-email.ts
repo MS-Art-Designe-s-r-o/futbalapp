@@ -11,6 +11,9 @@ export interface FeeEmailInput {
   items: FeeEmailItem[];
   iban?: string;
   accountName?: string;
+  /** Číslo účtu v tuzemskom tvare (napr. 62639-512/0200) a názov banky. */
+  accountNumber?: string;
+  bankName?: string;
 }
 
 const esc = (s: string) =>
@@ -56,7 +59,9 @@ export function buildFeeEmail(input: FeeEmailInput): { subject: string; html: st
   const line = (label: string, value: string) =>
     `<tr><td valign="top" style="padding:4px 0;${FONT}font-size:14px;color:#555555;width:150px;">${label}</td><td style="padding:4px 0;${FONT}font-size:15px;font-weight:bold;color:#111418;">${value}</td></tr>`;
   const accountLines = iban
-    ? line('Číslo účtu (IBAN)', esc(formatIbanSpaced(iban))) +
+    ? (input.bankName?.trim() ? line('Banka', esc(input.bankName.trim())) : '') +
+      (input.accountNumber?.trim() ? line('Číslo účtu', esc(input.accountNumber.trim())) : '') +
+      line('IBAN', esc(formatIbanSpaced(iban))) +
       (input.accountName?.trim() ? line('Prijímateľ', esc(input.accountName.trim())) : '')
     : line('Číslo účtu', 'Číslo účtu vám oznámi klub.');
   const vsLine = line(symbols.length > 1 ? 'Variabilné symboly' : 'Variabilný symbol', esc(symbols.join(', ')));

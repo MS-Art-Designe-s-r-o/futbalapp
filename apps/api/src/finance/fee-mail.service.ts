@@ -49,7 +49,9 @@ export class FeeMailService {
   private account() {
     const iban = process.env.CLUB_IBAN?.replace(/\s+/g, '').trim() || undefined;
     const accountName = process.env.CLUB_ACCOUNT_NAME?.trim() || undefined;
-    return { iban, accountName };
+    const accountNumber = process.env.CLUB_ACCOUNT_NUMBER?.trim() || undefined;
+    const bankName = process.env.CLUB_BANK_NAME?.trim() || undefined;
+    return { iban, accountName, accountNumber, bankName };
   }
 
   private async getPlan(id: string) {
@@ -87,7 +89,7 @@ export class FeeMailService {
         emailedAt: o.emailedAt,
       }))
       .sort((a, b) => a.name.localeCompare(b.name, 'sk'));
-    const { iban, accountName } = this.account();
+    const { iban, accountName, accountNumber, bankName } = this.account();
     let sampleHtml: string | null = null;
     if (rows[0]) {
       const r = rows[0];
@@ -98,6 +100,8 @@ export class FeeMailService {
         items: [{ periodLabel: r.periodLabel, amountCents: r.amountCents - r.paidCents > 0 ? r.amountCents - r.paidCents : r.amountCents, dueDate: r.dueDate, variableSymbol: r.variableSymbol }],
         iban,
         accountName,
+        accountNumber,
+        bankName,
       }).html;
     }
     return {
@@ -124,7 +128,7 @@ export class FeeMailService {
     const byMember = new Map<string, typeof sendable>();
     for (const o of sendable) byMember.set(o.memberId, [...(byMember.get(o.memberId) ?? []), o]);
 
-    const { iban, accountName } = this.account();
+    const { iban, accountName, accountNumber, bankName } = this.account();
     let membersNotified = 0;
     let emailsSent = 0;
     let emailError: string | null = null;
@@ -150,6 +154,8 @@ export class FeeMailService {
         })),
         iban,
         accountName,
+        accountNumber,
+        bankName,
       });
       const res = await this.emailService.send(emails, subject, html, 'info@fkknv.sk');
       if (res.sent) {

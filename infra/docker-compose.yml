@@ -38,8 +38,11 @@ services:
       EMAIL_FROM: ${EMAIL_FROM:-FK Košická Nová Ves <noreply@fkknv.sk>}
       RESEND_API_KEY: ${RESEND_API_KEY:-}
       # Bankový účet klubu pre e-maily s predpismi — voliteľné
-      CLUB_IBAN: ${CLUB_IBAN:-}
-      CLUB_ACCOUNT_NAME: ${CLUB_ACCOUNT_NAME:-}
+      # účet klubu pre e-maily s predpismi (dá sa prepísať v infra/.env)
+      CLUB_IBAN: ${CLUB_IBAN:-SK7702000000000062639512}
+      CLUB_ACCOUNT_NUMBER: ${CLUB_ACCOUNT_NUMBER:-62639-512/0200}
+      CLUB_BANK_NAME: ${CLUB_BANK_NAME:-VÚB, a.s.}
+      CLUB_ACCOUNT_NAME: ${CLUB_ACCOUNT_NAME:-FK Košická Nová Ves}
       # Veo (automatické hľadanie videa zo zápasu) — voliteľné
       VEO_CLIENT_ID: ${VEO_CLIENT_ID:-}
       VEO_USERNAME: ${VEO_USERNAME:-}

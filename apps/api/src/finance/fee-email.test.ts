@@ -36,3 +36,12 @@ describe('humanPeriodLabel jednorazový predpis', () => {
     expect(hpl('JEDNORAZOVO-2026-12')).toBe('Jednorazovo');
   });
 });
+
+describe('platobné údaje s bankou a číslom účtu', () => {
+  it('zobrazí banku, tuzemské číslo účtu aj IBAN', () => {
+    const r = buildFeeEmail({ memberName: 'A B', planName: 'Kemp', items: [{ periodLabel: 'JEDNORAZOVO-2026-12', amountCents: 6000, dueDate: null, variableSymbol: '140520162' }], iban: 'SK7702000000000062639512', accountNumber: '62639-512/0200', bankName: 'VÚB, a.s.' });
+    expect(r.html).toContain('VÚB, a.s.');
+    expect(r.html).toContain('62639-512/0200');
+    expect(r.html).toContain('SK77 0200 0000 0000 6263 9512');
+  });
+});

@@ -70,7 +70,7 @@ chmod 600 .env
 
 `JWT_SECRET` vygenerujete napr.: `openssl rand -base64 48`.
 `RESEND_API_KEY` sa dá doplniť neskôr (bez neho appka funguje, e-maily sa len logujú).
-`CLUB_IBAN` (a voliteľne `CLUB_ACCOUNT_NAME`) v `infra/.env` je účet klubu, ktorý sa uvádza v e-mailoch s predpismi poplatkov; bez neho e-mail napíše „Číslo účtu vám oznámi klub“.
+Účet klubu v e-mailoch s predpismi poplatkov (VÚB, 62639-512/0200, IBAN SK77 0200 0000 0000 6263 9512) je predvolený v `infra/docker-compose.yml`; prepísať ho možno v `infra/.env` cez `CLUB_IBAN`, `CLUB_ACCOUNT_NUMBER`, `CLUB_BANK_NAME`, `CLUB_ACCOUNT_NAME`. Ak je `CLUB_IBAN` prázdny, e-mail napíše „Číslo účtu vám oznámi klub“.
 
 ---
 
