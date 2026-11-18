@@ -8,6 +8,7 @@ import { coachTeams, isStaff, useMe } from '@/lib/auth';
 import { Card, PlayerPos } from '@/components/ui';
 import { AddressLink } from '@/components/AddressLink';
 import { MapEmbed } from '@/components/MapEmbed';
+import { TrainingIcon, trainingLabel } from '@/components/training-icon';
 import { EventAdminActions } from '@/components/event-admin-actions';
 
 interface AttendanceRow {
@@ -24,7 +25,7 @@ interface EventDetail {
   address: string | null;
   surface: SurfaceCode | null;
   recurrenceGroupId: string | null;
-  team: { id: string; name: string } | null;
+  team: { id: string; name: string; isGoalkeeperGroup?: boolean; teamCategory?: { code: string } } | null;
   attendances: AttendanceRow[];
 }
 
@@ -90,6 +91,10 @@ export default function AttendancePage({ params }: { params: Promise<{ id: strin
       {event && (
         <>
           <div>
+            <p className="mb-1 inline-flex items-center gap-2 rounded bg-club-100 px-2 py-0.5 text-xs font-semibold text-club-800">
+              <TrainingIcon goalkeeper={!!event.team?.isGoalkeeperGroup} size={16} />
+              {trainingLabel(!!event.team?.isGoalkeeperGroup)}
+            </p>
             <h1 className="text-2xl font-bold text-club-900">{event.title}</h1>
             <p className="text-sm text-gray-500">
               {event.team?.name} · {formatEventDateTimeSk(event.startAt)}
@@ -124,6 +129,11 @@ export default function AttendancePage({ params }: { params: Promise<{ id: strin
                   location={event.location}
                   address={event.address}
                   surface={event.surface}
+                  trainingTeam={
+                    event.team?.teamCategory
+                      ? { id: event.team.id, name: event.team.name, categoryCode: event.team.teamCategory.code, isGoalkeeperGroup: !!event.team.isGoalkeeperGroup }
+                      : undefined
+                  }
                   recurrenceGroupId={event.recurrenceGroupId}
                   onChanged={load}
                 />

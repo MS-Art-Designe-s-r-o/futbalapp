@@ -457,6 +457,24 @@ export class EventsService {
     const event = await this.prisma.event.findUnique({ where: { id: eventId } });
     if (!event) throw new NotFoundException('Udalosť neexistuje');
     if (!canManageTeam(user, event.teamId)) throw new ForbiddenException('Túto udalosť nemôžete upravovať');
+    // zmena typu tréningu: futbalový ↔ brankársky = prepnutie družstva udalosti
+    // (bežné družstvo ↔ skupina „… Brankári“ rovnakej kategórie alebo „Brankári (všetci)“)
+    let newTeamId: string | undefined;
+    if (input.teamId && input.teamId !== event.teamId) {
+      if (event.type !== 'TRAINING') throw new BadRequestException('Družstvo možno meniť len pri tréningu');
+      const [oldTeam, newTeam] = await Promise.all([
+        event.teamId ? this.prisma.team.findUnique({ where: { id: event.teamId } }) : null,
+        this.resolveTeam(input.teamId),
+      ]);
+      if (!newTeam || !oldTeam) throw new BadRequestException('Družstvo neexistuje');
+      const sameCategory = oldTeam.teamCategoryId === newTeam.teamCategoryId;
+      const toGk = newTeam.isGoalkeeperGroup && (sameCategory || newTeam.name === 'Brankári (všetci)');
+      if (!isStaff(user) && !canManageTeam(user, newTeam.id) && !toGk) {
+        throw new ForbiddenException('Tréning nemôžete presunúť do tohto družstva');
+      }
+      if (!isStaff(user) && !sameCategory && !toGk) throw new ForbiddenException('Tréning nemôžete presunúť do tohto družstva');
+      newTeamId = newTeam.id;
+    }
     const pitch = await this.resolvePitch(input.pitchId);
     const effectivePitchId = pitch ? pitch.id : input.pitchId === undefined ? event.pitchId : null;
     const newStart = input.startAt ?? event.startAt;
@@ -482,6 +500,7 @@ export class EventsService {
       where: { id: eventId },
       data: {
         title: input.title,
+        teamId: newTeamId,
         startAt: input.startAt,
         endAt: input.endAt,
         location: pitch ? pitch.name : input.location,
@@ -492,6 +511,11 @@ export class EventsService {
         isPublic: event.type === 'TRAINING' ? input.isPublic : undefined,
       },
     });
+    if (newTeamId) {
+      // nezapísaná dochádzka pôvodného družstva sa zahodí, zapísané stavy ostanú; doplní sa nové družstvo
+      await this.prisma.attendance.deleteMany({ where: { eventId, status: 'UNKNOWN', rsvp: 'NO_REPLY' } });
+      await this.prepareAttendance(eventId, newTeamId, event.seasonId);
+    }
     // priateľský zápas sa dá prepnúť len pri internom zápase (futbalnet zápas je vždy súťažný)
     if (input.friendly !== undefined && event.type === 'MATCH' && event.source === 'INTERNAL') {
       await this.prisma.match.updateMany({ where: { eventId }, data: { isFriendly: input.friendly } });

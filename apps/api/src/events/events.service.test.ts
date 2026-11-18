@@ -96,3 +96,40 @@ describe('zdieľanie plochy medzi tréningami', () => {
     expect(prisma.event.create).toHaveBeenCalled();
   });
 });
+
+describe('zmena typu tréningu (futbalový ↔ brankársky)', () => {
+  function makeSwitch() {
+    const { prisma, service } = make();
+    const teams: Record<string, unknown> = {
+      t1: { id: 't1', name: 'U10', teamCategoryId: 'c1', isGoalkeeperGroup: false },
+      g1: { id: 'g1', name: 'U10 Brankári', teamCategoryId: 'c1', isGoalkeeperGroup: true },
+      x1: { id: 'x1', name: 'U15', teamCategoryId: 'c2', isGoalkeeperGroup: false },
+    };
+    prisma.team.findUnique = vi.fn(async ({ where }: { where: { id: string } }) => (teams[where.id] ?? null) as never);
+    prisma.event.findUnique = vi.fn(async () => ({
+      id: 'e1', teamId: 't1', seasonId: 's1', type: 'TRAINING', pitchId: null,
+      startAt: new Date('2030-01-01T10:00:00Z'), endAt: new Date('2030-01-01T11:00:00Z'),
+    })) as never;
+    (prisma as never as Record<string, unknown>).attendance = { deleteMany: vi.fn(async () => ({})), createMany: vi.fn(async () => ({})), findMany: vi.fn(async () => []) };
+    return { prisma: prisma as never as typeof prisma & { attendance: { deleteMany: ReturnType<typeof vi.fn> } }, service };
+  }
+
+  it('vedenie prepne tréning na skupinu Brankári a dochádzka sa pripraví nanovo', async () => {
+    const { prisma, service } = makeSwitch();
+    await service.update('e1', { teamId: 'g1' } as never, admin);
+    expect(prisma.event.update.mock.calls[0]![0].data.teamId).toBe('g1');
+    expect(prisma.attendance.deleteMany).toHaveBeenCalled();
+  });
+
+  it('tréner svojho družstva smie prepnúť na brankársku skupinu rovnakej kategórie', async () => {
+    const { service } = makeSwitch();
+    const coach = { id: 'u2', roles: [{ role: 'COACH', teamId: 't1' }] } as never;
+    await expect(service.update('e1', { teamId: 'g1' } as never, coach)).resolves.toBeDefined();
+  });
+
+  it('tréner nesmie presunúť tréning do cudzej kategórie', async () => {
+    const { service } = makeSwitch();
+    const coach = { id: 'u2', roles: [{ role: 'COACH', teamId: 't1' }] } as never;
+    await expect(service.update('e1', { teamId: 'x1' } as never, coach)).rejects.toMatchObject({ status: 403 });
+  });
+});

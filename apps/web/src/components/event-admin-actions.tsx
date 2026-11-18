@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { SURFACE_CODES, SURFACE_LABELS_SK, addMinutesToHhmm } from '@fkknv/shared';
 import { api } from '@/lib/api';
+import { TrainingIcon } from '@/components/training-icon';
 import { Button, ErrorText, Modal, inputCls, labelCls } from '@/components/ui';
 
 function pad(n: number) {
@@ -29,6 +30,7 @@ export function EventAdminActions({
   matchId,
   matchState,
   opponent,
+  trainingTeam,
   recurrenceGroupId,
   onChanged,
 }: {
@@ -44,6 +46,8 @@ export function EventAdminActions({
   matchState?: string;
   /** Súper (zadaj len ak sa dá meniť — priateľský/interný zápas). */
   opponent?: string;
+  /** Tréning: aktuálne družstvo (umožní zmenu Futbalový ↔ Brankársky tréning). */
+  trainingTeam?: { id: string; name: string; categoryCode: string; isGoalkeeperGroup: boolean };
   recurrenceGroupId?: string | null;
   onChanged: () => void;
 }) {
@@ -60,6 +64,9 @@ export function EventAdminActions({
   const [opponentVal, setOpponentVal] = useState(opponent ?? '');
   const [clubs, setClubs] = useState<Array<{ id: string; name: string }>>([]);
   const [moveOpen, setMoveOpen] = useState(false);
+  const [allTeams, setAllTeams] = useState<Array<{ id: string; name: string; isGoalkeeperGroup?: boolean; teamCategory: { code: string } }>>([]);
+  const [gkType, setGkType] = useState(!!trainingTeam?.isGoalkeeperGroup);
+  const [teamVal, setTeamVal] = useState(trainingTeam?.id ?? '');
   const [cancelOpen, setCancelOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -70,14 +77,37 @@ export function EventAdminActions({
     if (moveOpen && venues.length === 0) {
       api<string[]>('/events/locations').then(setVenues).catch(() => {});
     }
+    if (moveOpen && trainingTeam && allTeams.length === 0) {
+      api<typeof allTeams>('/seasons/teams?withGk=1').then(setAllTeams).catch(() => {});
+    }
     if (moveOpen && opponent !== undefined && clubs.length === 0) {
       api<Array<{ id: string; name: string }>>('/clubs').then(setClubs).catch(() => {});
     }
-  }, [moveOpen, venues.length, opponent, clubs.length]);
+  }, [moveOpen, venues.length, opponent, clubs.length, trainingTeam, allTeams.length]);
 
   const label = kind === 'match' ? 'zápas' : kind === 'tournament' ? 'turnaj' : 'tréning';
   const canReschedule = kind !== 'match' || matchState === 'PLANNED';
   const canCancel = kind === 'match' && matchState === 'PLANNED';
+
+  // družstvá na výber podľa typu: bežné družstvá kategórie / skupiny Brankári (+ „Brankári (všetci)")
+  const teamOptions = trainingTeam
+    ? allTeams.filter((t) =>
+        gkType
+          ? !!t.isGoalkeeperGroup && (t.teamCategory.code === trainingTeam.categoryCode || t.name === 'Brankári (všetci)')
+          : !t.isGoalkeeperGroup && t.teamCategory.code === trainingTeam.categoryCode,
+      )
+    : [];
+  function chooseType(gk: boolean) {
+    setGkType(gk);
+    if (!trainingTeam) return;
+    const opts = allTeams.filter((t) =>
+      gk
+        ? !!t.isGoalkeeperGroup && (t.teamCategory.code === trainingTeam.categoryCode || t.name === 'Brankári (všetci)')
+        : !t.isGoalkeeperGroup && t.teamCategory.code === trainingTeam.categoryCode,
+    );
+    const own = opts.find((t) => t.id === trainingTeam.id) ?? opts.find((t) => t.name === `${trainingTeam.name.replace(/ Brankári$/, '')} Brankári`) ?? opts.find((t) => t.name === trainingTeam.name.replace(/ Brankári$/, '')) ?? opts[0];
+    setTeamVal(own?.id ?? '');
+  }
 
   const endInvalid = !!time && !!endTime && endTime <= time;
 
@@ -101,6 +131,7 @@ export function EventAdminActions({
         if (newTitle && opponent && newTitle.includes(opponent)) newTitle = newTitle.replace(opponent, oppNew);
       }
       if (newTitle) body.title = newTitle;
+      if (trainingTeam && teamVal && teamVal !== trainingTeam.id) body.teamId = teamVal;
       if (endTime) {
         body.endAt = new Date(Date.parse(`${date}T${endTime}:00Z`)).toISOString();
       } else if (endAt) {
@@ -190,6 +221,42 @@ export function EventAdminActions({
               <input type="time" value={endTime} onChange={(e) => setEndTime(e.target.value)} className={inputCls} />
             </div>
           </div>
+          {trainingTeam && (
+            <div className="rounded-md border border-club-100 p-3">
+              <label className={labelCls}>Typ tréningu</label>
+              <div className="mt-1 flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  onClick={() => chooseType(false)}
+                  className={`flex items-center gap-2 rounded-md border px-3 py-2 text-sm ${!gkType ? 'border-club-600 bg-club-50 font-semibold text-club-800' : 'border-gray-300 text-gray-600'}`}
+                >
+                  <TrainingIcon goalkeeper={false} size={16} /> Futbalový tréning
+                </button>
+                <button
+                  type="button"
+                  onClick={() => chooseType(true)}
+                  className={`flex items-center gap-2 rounded-md border px-3 py-2 text-sm ${gkType ? 'border-club-600 bg-club-50 font-semibold text-club-800' : 'border-gray-300 text-gray-600'}`}
+                >
+                  <TrainingIcon goalkeeper size={16} /> Brankársky tréning
+                </button>
+              </div>
+              {teamOptions.length > 0 && (
+                <div className="mt-2">
+                  <label className={labelCls}>{gkType ? 'Skupina brankárov' : 'Družstvo'}</label>
+                  <select value={teamVal} onChange={(e) => setTeamVal(e.target.value)} className={inputCls}>
+                    {teamOptions.map((t) => (
+                      <option key={t.id} value={t.id}>
+                        {t.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
+              <p className="mt-2 text-xs text-gray-500">
+                Pri zmene typu sa tréning presunie do vybraného družstva; dochádzka sa pripraví pre jeho hráčov (už zapísané stavy ostanú).
+              </p>
+            </div>
+          )}
           {title !== undefined && (
             <div>
               <label className={labelCls}>Názov</label>
