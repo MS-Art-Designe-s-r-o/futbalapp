@@ -18,6 +18,7 @@ import { api, ApiError } from '@/lib/api';
 import { canManage, canManageTeam, coachTeams, isStaff, useMe, type Me } from '@/lib/auth';
 import { Button, Card, ErrorText, Modal, inputCls, labelCls } from '@/components/ui';
 import { ClubPicker } from '@/components/club-picker';
+import { TrainingIcon, trainingLabel } from '@/components/training-icon';
 import { JerseyBadges, JerseyIcon, JerseyPicker, type JerseyColor } from '@/components/jersey';
 import { AddressField, PitchPicker } from '@/components/pitch-picker';
 
@@ -51,7 +52,7 @@ interface EventItem {
   address: string | null;
   surface: SurfaceCode | null;
   recurrenceGroupId: string | null;
-  team: { id: string; name: string; teamCategory: { code: string } } | null;
+  team: { id: string; name: string; isGoalkeeperGroup?: boolean; teamCategory: { code: string } } | null;
   audienceTeams?: Array<{ id: string; name: string }>;
   parentEventId?: string | null;
   parent?: { id: string; title: string } | null;
@@ -76,6 +77,12 @@ function placeFields(pitchId: string, location: string, surface: string) {
   return pitchId
     ? { pitchId }
     : { location: location || undefined, surface: surface || undefined };
+}
+
+/** Názov typu udalosti; tréning rozlišuje futbalový a brankársky. */
+function typeLabel(e: { type: string; team?: { isGoalkeeperGroup?: boolean } | null }): string {
+  if (e.type === 'TRAINING') return trainingLabel(!!e.team?.isGoalkeeperGroup);
+  return typeLabels[e.type] ?? e.type;
 }
 
 const typeLabels: Record<string, string> = {
@@ -501,10 +508,11 @@ function EventList({
             const body = (
               <>
                 <span
-                  className="inline-block rounded px-2 py-0.5 text-xs font-medium"
+                  className="inline-flex items-center gap-1.5 rounded px-2 py-0.5 text-xs font-medium"
                   style={{ backgroundColor: c.bg, color: c.text }}
                 >
-                  {typeLabels[e.type] ?? e.type}
+                  {e.type === 'TRAINING' && <TrainingIcon goalkeeper={!!e.team?.isGoalkeeperGroup} size={20} />}
+                  {typeLabel(e)}
                   {e.team ? ` · ${compactTeam(e.team.name)}` : ''}
                   {e.recurrenceGroupId ? ' · séria' : ''}
                 </span>
@@ -678,8 +686,9 @@ function MonthView({
                         const label = `${
                           e.match
                             ? `${e.team ? `${compactTeam(e.team.name)} ` : ''}⚽ ${e.match.opponent}`
-                            : `${e.team ? `${compactTeam(e.team.name)} ` : ''}${typeLabels[e.type] ?? e.type}`
+                            : `${e.team ? `${compactTeam(e.team.name)} ` : ''}${typeLabel(e)}`
                         }${e.match?.isFriendly ? ' (prát.)' : ''}${isNominated ? ' ✓' : ''}`;
+                        const trainIcon = e.type === 'TRAINING' ? <TrainingIcon goalkeeper={!!e.team?.isGoalkeeperGroup} size={15} /> : null;
                         const jc = e.match?.jerseyColors ?? [];
                         const jersey =
                           jc.length > 0 ? (
@@ -707,7 +716,7 @@ function MonthView({
                             }`}
                             style={{ backgroundColor: c.bg, color: c.text, borderLeft: `3px solid ${c.text}` }}
                           >
-                            {jersey}
+                            {jersey}{trainIcon}
                             <span className="truncate"><b className="mr-1 font-bold tabular-nums">{time}</b>{label}</span>
                           </Link>
                         ) : (
@@ -719,7 +728,7 @@ function MonthView({
                             }`}
                             style={{ backgroundColor: c.bg, color: c.text, borderLeft: `3px solid ${c.text}` }}
                           >
-                            {jersey}
+                            {jersey}{trainIcon}
                             <span className="truncate"><b className="mr-1 font-bold tabular-nums">{time}</b>{label}</span>
                           </div>
                         );
