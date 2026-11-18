@@ -253,7 +253,7 @@ export default function PrivacyPage() {
                 <strong>MS Art Designe s. r. o.</strong> — vývoj, prevádzka a technická správa portálu a mobilnej aplikácie
                 (sprostredkovateľ),
               </li>
-              <li>poskytovateľ serverového hostingu, na ktorom portál beží (sprostredkovateľ),</li>
+              <li><strong>Websupport, s. r. o.</strong> (websupport.sk) — hosting servera, na ktorom portál beží (sprostredkovateľ),</li>
               <li>Resend — doručovanie e-mailov z portálu (sprostredkovateľ),</li>
               <li>Expo — doručovanie push upozornení do mobilnej aplikácie (sprostredkovateľ),</li>
               <li>banka klubu, účtovník klubu a orgány verejnej moci, ak to vyžaduje zákon.</li>
