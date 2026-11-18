@@ -96,6 +96,10 @@ export default function LoginPage() {
               <Link href="/podpora" className="text-club-600 hover:underline">
                 Podpora
               </Link>
+              {' · '}
+              <Link href="/dokumenty/ochrana-osobnych-udajov" className="text-club-600 hover:underline">
+                Ochrana osobných údajov
+              </Link>
             </p>
           </>
         ) : (

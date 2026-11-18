@@ -166,6 +166,19 @@ export default function PortalLayout({ children }: { children: React.ReactNode }
         {openGroup && <button type="button" aria-hidden className="fixed inset-0 z-30 cursor-default" onClick={() => setOpenGroup(null)} />}
       </header>
       <main className="mx-auto max-w-6xl px-6 py-8">{children}</main>
+      <footer className="mx-auto max-w-6xl border-t border-club-100 px-6 py-5 text-xs text-gray-500">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <span>© {new Date().getFullYear()} FK Košická Nová Ves</span>
+          <span className="flex flex-wrap gap-4">
+            <Link href="/dokumenty/ochrana-osobnych-udajov" className="hover:text-club-700 hover:underline">
+              Ochrana osobných údajov (GDPR)
+            </Link>
+            <Link href="/podpora" className="hover:text-club-700 hover:underline">
+              Podpora
+            </Link>
+          </span>
+        </div>
+      </footer>
     </div>
   );
 }
