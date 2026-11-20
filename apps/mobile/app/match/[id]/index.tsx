@@ -24,7 +24,7 @@ import { MatchTimerCard, timerOf, type MatchTimerFields } from '@/MatchTimerCard
 
 interface Nomination {
   id: string;
-  member: { id: string; firstName: string; lastName: string; position?: string | null };
+  member: { id: string; firstName: string; lastName: string; position?: string | null; position2?: string | null };
 }
 
 interface MatchEventRow {

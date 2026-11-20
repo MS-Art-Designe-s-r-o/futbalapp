@@ -74,8 +74,10 @@ export function ErrorText({ children }: { children: ReactNode }) {
 }
 
 /** Malá skratka postavenia hráča (CB, CM…) za menom; nič, ak nie je zadané. */
-export function PlayerPos({ position }: { position?: string | null }) {
-  const short = positionShort(position);
+export function PlayerPos({ position, position2 }: { position?: string | null; position2?: string | null }) {
+  const short = [positionShort(position), position2 && position2 !== position ? positionShort(position2) : '']
+    .filter(Boolean)
+    .join(' · ');
   if (!short) return null;
   return (
     <span className="ml-1 whitespace-nowrap rounded bg-club-100 px-1 py-0.5 align-middle text-[10px] font-semibold text-club-700">

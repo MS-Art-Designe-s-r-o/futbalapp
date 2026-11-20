@@ -16,7 +16,7 @@ const TOURNAMENT_INCLUDE = Prisma.validator<Prisma.EventInclude>()({
   team: { select: { id: true, name: true } },
   match: { select: { id: true } },
   tournamentParticipants: { orderBy: [{ sortOrder: 'asc' }, { clubName: 'asc' }] },
-  tournamentNominations: { include: { member: { select: { id: true, firstName: true, lastName: true, position: true } } } },
+  tournamentNominations: { include: { member: { select: { id: true, firstName: true, lastName: true, position: true, position2: true } } } },
   children: {
     include: {
       match: {
@@ -112,7 +112,7 @@ export class TournamentsService {
       nominations: t.tournamentNominations
         .map((n) => n.member)
         .sort(byName)
-        .map((m) => ({ memberId: m.id, firstName: m.firstName, lastName: m.lastName, position: m.position })),
+        .map((m) => ({ memberId: m.id, firstName: m.firstName, lastName: m.lastName, position: m.position, position2: m.position2 })),
     };
   }
 
@@ -126,7 +126,7 @@ export class TournamentsService {
         isDemo: t.isDemo,
         memberships: { some: { teamId: t.teamId, leftAt: null, season: { isActive: true } } },
       },
-      select: { id: true, firstName: true, lastName: true, position: true },
+      select: { id: true, firstName: true, lastName: true, position: true, position2: true },
     });
     const nominated = new Set(t.tournamentNominations.map((n) => n.memberId));
     const rows = members.sort(byName).map((m) => ({ ...m, nominated: nominated.has(m.id) }));

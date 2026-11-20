@@ -125,6 +125,8 @@ export const createMemberSchema = z.object({
   isGoalkeeper: z.boolean().optional(),
   /// postavenie hráča (prázdne = nezadané)
   position: z.enum(PLAYER_POSITIONS).nullable().optional(),
+  /// druhé postavenie hráča (voliteľné)
+  position2: z.enum(PLAYER_POSITIONS).nullable().optional(),
   /// úroveň trénerskej licencie
   licenseLevel: z.enum(['A_PRO', 'A', 'B', 'C', 'GK']).optional(),
   /// registračný preukaz / futbalnet
@@ -458,6 +460,7 @@ export type UpdateClubDocumentInput = z.infer<typeof updateClubDocumentSchema>;
 export const coachUpdateMemberSchema = z
   .object({
     position: z.enum(PLAYER_POSITIONS).nullable().optional(),
+    position2: z.enum(PLAYER_POSITIONS).nullable().optional(),
     socialCase: z.boolean().optional(),
     healthNotes: z.string().max(2000).nullable().optional(),
     teamIds: z.array(z.string().min(1)).optional(),

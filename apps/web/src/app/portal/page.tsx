@@ -313,6 +313,7 @@ interface PlayerRow {
   firstName: string;
   lastName: string;
   position?: string | null;
+  position2?: string | null;
   memberships: Array<{ team: { name: string; teamCategory: { code: string } } }>;
 }
 interface Group {
@@ -385,7 +386,7 @@ function PlayersByGroup() {
                     .map((p) => (
                       <li key={p.id}>
                         {p.lastName} {p.firstName}
-                        <PlayerPos position={p.position} />
+                        <PlayerPos position={p.position} position2={p.position2} />
                       </li>
                     ))}
                 </ul>
@@ -401,7 +402,7 @@ function PlayersByGroup() {
 interface Nomination {
   id: string;
   status: string;
-  member: { firstName: string; lastName: string; position?: string | null };
+  member: { firstName: string; lastName: string; position?: string | null; position2?: string | null };
   opponent: string;
   isHome: boolean;
   startAt: string;
@@ -447,7 +448,7 @@ function MatchConfirmations() {
                 </span>
                 <span className="font-medium">
                   {n.member.lastName} {n.member.firstName}
-                  <PlayerPos position={n.member.position} />
+                  <PlayerPos position={n.member.position} position2={n.member.position2} />
                 </span>
                 <span className="ml-2 text-sm text-gray-600">
                   {n.isHome ? 'doma' : 'vonku'} vs {n.opponent} ·{' '}

@@ -60,7 +60,7 @@ export class GoalkeepersService implements OnApplicationBootstrap {
         seasonId: season.id,
         leftAt: null,
         teamId: { in: baseTeams.map((t) => t.id) },
-        member: { status: { not: 'INACTIVE' }, isDemo: false, OR: [{ isGoalkeeper: true }, { position: 'GK' }] },
+        member: { status: { not: 'INACTIVE' }, isDemo: false, OR: [{ isGoalkeeper: true }, { position: 'GK' }, { position2: 'GK' }] },
       },
       select: { teamId: true, memberId: true },
     });

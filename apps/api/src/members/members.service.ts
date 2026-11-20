@@ -419,6 +419,7 @@ export class MembersService {
         socialCase: input.socialCase,
         isGoalkeeper: input.isGoalkeeper,
         position: input.position,
+        position2: input.position2,
         licenseLevel: input.licenseLevel,
         registrationNumber: input.registrationNumber,
         homeClub: input.homeClub,
@@ -450,6 +451,7 @@ export class MembersService {
         socialCase: input.socialCase,
         isGoalkeeper: input.isGoalkeeper,
         position: input.position,
+        position2: input.position2,
         licenseLevel: input.licenseLevel,
         registrationNumber: input.registrationNumber,
         homeClub: input.homeClub,
@@ -613,6 +615,7 @@ export class MembersService {
 
     const data: Record<string, unknown> = {};
     if (input.position !== undefined) data.position = input.position;
+    if (input.position2 !== undefined) data.position2 = input.position2;
     if (input.socialCase !== undefined) data.socialCase = input.socialCase;
     if (input.healthNotes !== undefined) data.healthNotes = input.healthNotes?.trim() ? input.healthNotes : null;
     if (Object.keys(data).length) await this.prisma.member.update({ where: { id }, data });
@@ -628,7 +631,7 @@ export class MembersService {
       });
     }
 
-    if (input.teamIds !== undefined || input.position !== undefined) {
+    if (input.teamIds !== undefined || input.position !== undefined || input.position2 !== undefined) {
       await this.goalkeepers.sync().catch((e) => this.logger.warn(`Synchronizácia skupín brankárov zlyhala: ${e instanceof Error ? e.message : e}`));
     }
     return this.get(id);

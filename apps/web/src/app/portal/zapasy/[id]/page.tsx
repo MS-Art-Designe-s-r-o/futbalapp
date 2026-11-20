@@ -33,6 +33,7 @@ interface Member {
   firstName: string;
   lastName: string;
   position?: string | null;
+  position2?: string | null;
 }
 interface Nomination {
   id: string;
@@ -885,7 +886,7 @@ export default function MatchPage({ params }: { params: Promise<{ id: string }> 
                     >
                       <span>
                         {m.lastName} {m.firstName}
-                        <PlayerPos position={m.position} />
+                        <PlayerPos position={m.position} position2={m.position2} />
                       </span>
                       <span className={on ? 'text-club-600' : 'text-gray-400'}>{on ? '✓ v nominácii' : '+ pridať'}</span>
                     </button>
@@ -926,7 +927,7 @@ export default function MatchPage({ params }: { params: Promise<{ id: string }> 
               {match.nominations.map((n) => (
                 <li key={n.id}>
                   {n.member.lastName} {n.member.firstName}
-                  <PlayerPos position={n.member.position} />
+                  <PlayerPos position={n.member.position} position2={n.member.position2} />
                 </li>
               ))}
             </ul>

@@ -56,6 +56,11 @@ export function positionShort(code: string | null | undefined): string {
   return code ? (PLAYER_POSITION_SHORT as Record<string, string>)[code] ?? '' : '';
 }
 
+/** Skratky jedného alebo dvoch postavení (napr. 'CM · CAM'). */
+export function positionsShort(p1: string | null | undefined, p2?: string | null): string {
+  return [positionShort(p1), p2 && p2 !== p1 ? positionShort(p2) : ''].filter(Boolean).join(' · ');
+}
+
 /** Označenie priateľského zápasu (Match.isFriendly) — napr. namiesto súťaže. */
 export const FRIENDLY_MATCH_LABEL_SK = 'Priateľský zápas';
 

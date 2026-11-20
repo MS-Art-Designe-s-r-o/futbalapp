@@ -14,7 +14,7 @@ import { EventAdminActions } from '@/components/event-admin-actions';
 interface AttendanceRow {
   id: string;
   status: string;
-  member: { id: string; firstName: string; lastName: string; position?: string | null };
+  member: { id: string; firstName: string; lastName: string; position?: string | null; position2?: string | null };
 }
 interface EventDetail {
   id: string;
@@ -146,7 +146,7 @@ export default function AttendancePage({ params }: { params: Promise<{ id: strin
                 <li key={row.id} className="flex items-center justify-between gap-3 px-4 py-3">
                   <span className="font-medium">
                     {row.member.lastName} {row.member.firstName}
-                    <PlayerPos position={row.member.position} />
+                    <PlayerPos position={row.member.position} position2={row.member.position2} />
                   </span>
                   <div className="flex gap-1">
                     {STATUSES.map((s) => (

@@ -47,12 +47,12 @@ export class MatchesService {
         event: { include: { team: { include: { teamCategory: true } }, parent: { select: { id: true, title: true } } } },
         nominations: {
           where: { status: { not: 'REMOVED' } },
-          include: { member: { select: { id: true, firstName: true, lastName: true, position: true } } },
+          include: { member: { select: { id: true, firstName: true, lastName: true, position: true, position2: true } } },
         },
         events: {
           include: {
-            member: { select: { id: true, firstName: true, lastName: true, position: true } },
-            relatedMember: { select: { id: true, firstName: true, lastName: true, position: true } },
+            member: { select: { id: true, firstName: true, lastName: true, position: true, position2: true } },
+            relatedMember: { select: { id: true, firstName: true, lastName: true, position: true, position2: true } },
           },
           orderBy: [{ minute: 'asc' }, { createdAt: 'asc' }],
         },
@@ -185,7 +185,7 @@ export class MatchesService {
                 id: true,
                 firstName: true,
                 lastName: true,
-                position: true,
+                position: true, position2: true,
                 user: { select: { email: true } },
                 guardians: { select: { user: { select: { email: true } } } },
               },
@@ -276,7 +276,7 @@ export class MatchesService {
       select: {
         matchId: true,
         status: true,
-        member: { select: { id: true, firstName: true, lastName: true, position: true } },
+        member: { select: { id: true, firstName: true, lastName: true, position: true, position2: true } },
       },
     });
     return noms.map((n) => ({
@@ -317,7 +317,7 @@ export class MatchesService {
         },
       },
       include: {
-        member: { select: { id: true, firstName: true, lastName: true, position: true } },
+        member: { select: { id: true, firstName: true, lastName: true, position: true, position2: true } },
         match: { include: { event: { include: { team: { include: { teamCategory: true } } } } } },
       },
       orderBy: { match: { event: { startAt: 'asc' } } },

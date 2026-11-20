@@ -34,6 +34,7 @@ interface Candidate {
   firstName: string;
   lastName: string;
   position?: string | null;
+  position2?: string | null;
   nominated: boolean;
 }
 interface Tournament {
@@ -50,7 +51,7 @@ interface Tournament {
   };
   participants: Array<{ id: string; clubName: string; logoUrl: string | null; sortOrder: number }>;
   matches: TournamentMatch[];
-  nominations?: Array<{ memberId: string; firstName: string; lastName: string; position?: string | null }>;
+  nominations?: Array<{ memberId: string; firstName: string; lastName: string; position?: string | null; position2?: string | null }>;
 }
 
 const STATE_LABELS: Record<string, string> = {
@@ -376,7 +377,7 @@ export default function TournamentPage({ params }: { params: Promise<{ id: strin
               {nominations.map((n) => (
                 <li key={n.memberId} className="px-2 py-1 text-sm text-club-900">
                   {n.firstName} {n.lastName}
-                  <PlayerPos position={n.position} />
+                  <PlayerPos position={n.position} position2={n.position2} />
                 </li>
               ))}
             </ul>
@@ -417,7 +418,7 @@ export default function TournamentPage({ params }: { params: Promise<{ id: strin
                   <li key={c.id} className="flex items-center justify-between gap-3 px-4 py-2">
                     <span className="text-sm text-club-900">
                       {c.firstName} {c.lastName}
-                      <PlayerPos position={c.position} />
+                      <PlayerPos position={c.position} position2={c.position2} />
                       {c.nominated && <span className="ml-2 text-xs font-semibold text-green-700">nominovaný</span>}
                     </span>
                     <Button

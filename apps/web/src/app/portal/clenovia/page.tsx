@@ -27,6 +27,7 @@ interface MemberRow {
   socialCase?: boolean;
   isGoalkeeper?: boolean;
   position?: string | null;
+  position2?: string | null;
   licenseLevel?: string | null;
   registrationValidUntil?: string | null;
   homeClub?: string | null;
@@ -498,7 +499,7 @@ function MembersTable() {
               <tr key={m.id}>
                 <td className="sticky left-0 z-10 whitespace-nowrap bg-white px-3 py-2 font-medium shadow-[2px_0_4px_-2px_rgba(0,0,0,0.15)]">
                   {m.lastName} {m.firstName}
-                  <PlayerPos position={m.position} />
+                  <PlayerPos position={m.position} position2={m.position2} />
                 </td>
                 <td className="px-3 py-2">
                   <span className="flex flex-wrap gap-1">
@@ -700,6 +701,7 @@ function MemberModal({
   const [socialCase, setSocialCase] = useState(member?.socialCase ?? false);
   const [isGoalkeeper, setIsGoalkeeper] = useState(member?.isGoalkeeper ?? false);
   const [position, setPosition] = useState(member?.position ?? '');
+  const [position2, setPosition2] = useState(member?.position2 ?? '');
   const [licenseLevel, setLicenseLevel] = useState(member?.licenseLevel ?? '');
   const [healthNotes, setHealthNotes] = useState(member?.healthNotes ?? '');
   const [teamIds, setTeamIds] = useState<string[]>(() => {
@@ -837,6 +839,7 @@ function MemberModal({
       socialCase,
       isGoalkeeper,
       position: position || null,
+      position2: position2 || null,
       licenseLevel: licenseLevel || undefined,
       healthNotes: healthNotes || undefined,
       homeClub: homeClub || undefined,
@@ -1123,6 +1126,18 @@ function MemberModal({
             ))}
           </select>
         </div>
+        {/* Druhé postavenie hráča (voliteľné) */}
+        <div>
+          <label className={labelCls}>Druhé postavenie (voliteľné)</label>
+          <select value={position2} onChange={(e) => setPosition2(e.target.value)} className={inputCls}>
+            <option value="">— žiadne —</option>
+            {PLAYER_POSITIONS.map((p) => (
+              <option key={p} value={p}>
+                {PLAYER_POSITION_LABELS_SK[p]}
+              </option>
+            ))}
+          </select>
+        </div>
 
         {/* Konto na prihlásenie */}
         <div className="rounded-md bg-club-50 p-3">
@@ -1381,6 +1396,7 @@ function CoachEditPanel({
   const ownTeams = allTeams.filter((t) => coachTeamList.includes(t.id) && !t.isGoalkeeperGroup);
   const ownIds = new Set(ownTeams.map((t) => t.id));
   const [position, setPosition] = useState(member.position ?? '');
+  const [position2, setPosition2] = useState(member.position2 ?? '');
   const [socialCase, setSocialCase] = useState(member.socialCase ?? false);
   const [healthNotes, setHealthNotes] = useState(member.healthNotes ?? '');
   const [teamIds, setTeamIds] = useState<string[]>(() =>
@@ -1409,6 +1425,7 @@ function CoachEditPanel({
         method: 'PATCH',
         body: JSON.stringify({
           position: position || null,
+          position2: position2 || null,
           socialCase,
           healthNotes: healthNotes.trim() ? healthNotes : null,
           teamIds,
@@ -1429,6 +1446,17 @@ function CoachEditPanel({
       <div>
         <label className={labelCls}>Postavenie</label>
         <select value={position} onChange={(e) => setPosition(e.target.value)} className={inputCls}>
+          <option value="">—</option>
+          {PLAYER_POSITIONS.map((p) => (
+            <option key={p} value={p}>
+              {PLAYER_POSITION_LABELS_SK[p]}
+            </option>
+          ))}
+        </select>
+      </div>
+      <div>
+        <label className={labelCls}>Druhé postavenie (voliteľné)</label>
+        <select value={position2} onChange={(e) => setPosition2(e.target.value)} className={inputCls}>
           <option value="">—</option>
           {PLAYER_POSITIONS.map((p) => (
             <option key={p} value={p}>

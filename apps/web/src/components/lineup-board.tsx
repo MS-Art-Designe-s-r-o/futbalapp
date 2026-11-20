@@ -18,6 +18,7 @@ interface Player {
   firstName: string;
   lastName: string;
   position?: string | null;
+  position2?: string | null;
 }
 
 const ORDER: PlayerPosition[] = ['GK', 'CB', 'FB', 'WB', 'CDM', 'CM', 'CAM', 'WM', 'W', 'SS', 'ST', 'UNI'];
@@ -120,7 +121,7 @@ export function LineupBoard({
     const taken = new Set<string>();
     const next: Record<string, string> = {};
     formationSlots.forEach((s, i) => {
-      const c = players.find((p) => p.position === s.pos && !taken.has(p.id));
+      const c = players.find((p) => (p.position === s.pos || p.position2 === s.pos) && !taken.has(p.id));
       if (c) {
         next[String(i)] = c.id;
         taken.add(c.id);
@@ -176,7 +177,7 @@ export function LineupBoard({
     }
   }
 
-  const groups = ORDER.map((pos) => ({ pos, list: players.filter((p) => p.position === pos) })).filter((g) => g.list.length);
+  const groups = ORDER.map((pos) => ({ pos, list: players.filter((p) => p.position === pos || p.position2 === pos) })).filter((g) => g.list.length);
   const noPos = players.filter((p) => !p.position || !ORDER.includes(p.position as PlayerPosition));
   if (noPos.length) groups.push({ pos: '' as PlayerPosition, list: noPos });
 
@@ -234,7 +235,7 @@ export function LineupBoard({
             </svg>
             {formationSlots.map((s, i) => {
               const p = byId.get(slots[String(i)] ?? '');
-              const off = p && p.position !== s.pos;
+              const off = p && p.position !== s.pos && p.position2 !== s.pos;
               return (
                 <button
                   key={i}
@@ -294,7 +295,7 @@ export function LineupBoard({
                           <span>
                             {p.lastName} {p.firstName}
                           </span>
-                          <span className="text-xs text-gray-500">{on ? 'v zostave' : p.position ? short(p.position) : ''}</span>
+                          <span className="text-xs text-gray-500">{on ? 'v zostave' : p.position ? [short(p.position), p.position2 ? short(p.position2) : ''].filter(Boolean).join(' · ') : ''}</span>
                         </button>
                       );
                     })}

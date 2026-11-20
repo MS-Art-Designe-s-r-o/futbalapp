@@ -14,6 +14,7 @@ interface Candidate {
   firstName: string;
   lastName: string;
   position?: string | null;
+  position2?: string | null;
   birthYear: number | null;
   categoryCode: string | null;
   teams: Array<{ id: string; name: string }>;
@@ -271,7 +272,7 @@ export function CrossNomination({ matchId, onChange }: { matchId: string; onChan
                     <span className="min-w-0">
                       <span className="text-club-900">
                         {c.lastName} {c.firstName}
-                        <PlayerPos position={c.position} />
+                        <PlayerPos position={c.position} position2={c.position2} />
                       </span>
                       <span className="ml-2 text-xs text-gray-500">
                         {[c.birthYear, c.categoryCode, c.teams.map((t) => t.name).join(', ')].filter(Boolean).join(' · ')}

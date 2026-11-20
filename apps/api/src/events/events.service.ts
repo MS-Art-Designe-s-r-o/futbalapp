@@ -685,7 +685,7 @@ export class EventsService {
       include: {
         team: { include: { teamCategory: true } },
         attendances: {
-          include: { member: { select: { id: true, firstName: true, lastName: true, position: true } } },
+          include: { member: { select: { id: true, firstName: true, lastName: true, position: true, position2: true } } },
         },
       },
     });
@@ -726,7 +726,7 @@ export class EventsService {
     const attendances = (
       await this.prisma.attendance.findMany({
         where: { eventId: { in: eventIds } },
-        include: { member: { select: { id: true, firstName: true, lastName: true, position: true } } },
+        include: { member: { select: { id: true, firstName: true, lastName: true, position: true, position2: true } } },
       })
     ).filter((a) => a.status !== 'UNKNOWN' || active.has(`${seasonOf.get(a.eventId)}:${a.memberId}`));
     const byMember = new Map<string, { name: string; present: number; counted: number }>();
@@ -779,7 +779,7 @@ export class EventsService {
       eventIds.length
         ? await this.prisma.attendance.findMany({
             where: { eventId: { in: eventIds } },
-            include: { member: { select: { id: true, firstName: true, lastName: true, position: true } } },
+            include: { member: { select: { id: true, firstName: true, lastName: true, position: true, position2: true } } },
           })
         : []
     ).filter((a) => a.status !== 'UNKNOWN' || active.has(`${seasonOf.get(a.eventId)}:${a.memberId}`));
@@ -787,7 +787,7 @@ export class EventsService {
     const STATUSES = ['PRESENT', 'ABSENT', 'EXCUSED', 'INJURED', 'SICK'] as const;
     const members = new Map<
       string,
-      { id: string; firstName: string; lastName: string; position: string | null; cells: Record<string, string>; summary: Record<string, number> }
+      { id: string; firstName: string; lastName: string; position: string | null; position2: string | null; cells: Record<string, string>; summary: Record<string, number> }
     >();
     for (const a of attendances) {
       let m = members.get(a.memberId);
@@ -797,6 +797,7 @@ export class EventsService {
           firstName: a.member.firstName,
           lastName: a.member.lastName,
           position: a.member.position,
+          position2: a.member.position2,
           cells: {},
           summary: Object.fromEntries(STATUSES.map((s) => [s, 0])),
         };

@@ -15,6 +15,7 @@ interface PlayerHit {
   firstName: string;
   lastName: string;
   position?: string | null;
+  position2?: string | null;
   teams: Array<{ id: string; name: string }>;
 }
 interface PendingTransfer {
@@ -154,7 +155,7 @@ export default function TransfersPage() {
                 <div className="text-sm">
                   <span className="font-medium text-club-900">
                     {p.lastName} {p.firstName}
-                    <PlayerPos position={p.position} />
+                    <PlayerPos position={p.position} position2={p.position2} />
                   </span>{' '}
                   <span className="text-gray-500">
                     {p.teams.length ? p.teams.map((t) => t.name).join(', ') : 'bez družstva'}
