@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { api } from '@/lib/api';
 import { coachTeams, isStaff, useMe } from '@/lib/auth';
-import { Card, ErrorText } from '@/components/ui';
+import { Card, ErrorText, Modal } from '@/components/ui';
 
 interface Team {
   id: string;
@@ -53,6 +53,8 @@ export default function AttendanceReportPage() {
   const [sheet, setSheet] = useState<Sheet | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [editing, setEditing] = useState<{ row: SheetRow; training: Training } | null>(null);
+  const [saving, setSaving] = useState(false);
 
   // tréner vidí len svoje družstvá; vedenie všetky
   const availableTeams = useMemo(() => {
@@ -84,6 +86,40 @@ export default function AttendanceReportPage() {
   useEffect(() => {
     void load();
   }, [load]);
+
+  // vedenie upravuje všetko; tréner len dochádzku svojho družstva
+  const canEdit = isStaff(me) || coachTeams(me).some((t) => t.id === teamId);
+
+  /** Zapíše (alebo zruší) účasť hráča na tréningu a hneď prepočíta list. */
+  async function setStatus(row: SheetRow, training: Training, status: string) {
+    setSaving(true);
+    setError(null);
+    try {
+      await api(`/events/${training.id}/attendance`, {
+        method: 'POST',
+        body: JSON.stringify({ memberId: row.id, status }),
+      });
+      setSheet((prev) =>
+        prev
+          ? {
+              ...prev,
+              rows: prev.rows.map((r) => {
+                if (r.id !== row.id) return r;
+                const cells = { ...r.cells, [training.id]: status };
+                const summary: Record<string, number> = Object.fromEntries(STATUS_ORDER.map((st) => [st, 0]));
+                for (const v of Object.values(cells)) if (v in summary) summary[v]!++;
+                return { ...r, cells, summary };
+              }),
+            }
+          : prev,
+      );
+      setEditing(null);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Uloženie zlyhalo');
+    } finally {
+      setSaving(false);
+    }
+  }
 
   return (
     <div className="space-y-5">
@@ -152,14 +188,26 @@ export default function AttendanceReportPage() {
                   {sheet.trainings.map((t) => {
                     const st = r.cells[t.id];
                     const meta = st ? STATUS_META[st] : null;
+                    const badge = meta ? (
+                      <span className={`inline-flex h-6 w-7 items-center justify-center rounded text-xs font-bold ${meta.cls}`}>
+                        {meta.abbr}
+                      </span>
+                    ) : (
+                      <span className="text-gray-300">·</span>
+                    );
                     return (
                       <td key={t.id} className="px-2 py-1.5 text-center">
-                        {meta ? (
-                          <span className={`inline-flex h-6 w-7 items-center justify-center rounded text-xs font-bold ${meta.cls}`}>
-                            {meta.abbr}
-                          </span>
+                        {canEdit ? (
+                          <button
+                            type="button"
+                            onClick={() => setEditing({ row: r, training: t })}
+                            title="Zmeniť účasť"
+                            className="inline-flex h-7 min-w-8 items-center justify-center rounded hover:ring-2 hover:ring-club-300"
+                          >
+                            {badge}
+                          </button>
                         ) : (
-                          <span className="text-gray-300">·</span>
+                          badge
                         )}
                       </td>
                     );
@@ -191,7 +239,46 @@ export default function AttendanceReportPage() {
           </table>
         </div>
       )}
-      <p className="text-xs text-gray-500">Prehľad je len na čítanie. Dochádzku upravíte pri konkrétnom tréningu.</p>
+      <p className="text-xs text-gray-500">
+        {canEdit
+          ? 'Kliknutím na políčko doplníte alebo zmeníte účasť hráča na tréningu.'
+          : 'Prehľad je len na čítanie. Dochádzku upravuje tréner družstva alebo vedenie.'}
+      </p>
+      <Modal
+        open={!!editing}
+        onClose={() => setEditing(null)}
+        title={editing ? `${editing.row.lastName} ${editing.row.firstName} · ${dayLabel(editing.training.startAt)}` : ''}
+      >
+        {editing && (
+          <div className="space-y-2">
+            {STATUS_ORDER.map((st) => {
+              const active = editing.row.cells[editing.training.id] === st;
+              return (
+                <button
+                  key={st}
+                  type="button"
+                  disabled={saving}
+                  onClick={() => void setStatus(editing.row, editing.training, st)}
+                  className={`flex w-full items-center gap-3 rounded border px-3 py-2 text-left text-sm hover:bg-club-50 ${active ? 'border-club-600 ring-1 ring-club-600' : 'border-club-100'}`}
+                >
+                  <span className={`inline-flex h-6 w-7 items-center justify-center rounded text-xs font-bold ${STATUS_META[st].cls}`}>
+                    {STATUS_META[st].abbr}
+                  </span>
+                  {STATUS_META[st].label}
+                </button>
+              );
+            })}
+            <button
+              type="button"
+              disabled={saving}
+              onClick={() => void setStatus(editing.row, editing.training, 'UNKNOWN')}
+              className="w-full rounded border border-club-100 px-3 py-2 text-left text-sm text-gray-600 hover:bg-club-50"
+            >
+              Zrušiť zápis (nezapísané)
+            </button>
+          </div>
+        )}
+      </Modal>
     </div>
   );
 }
