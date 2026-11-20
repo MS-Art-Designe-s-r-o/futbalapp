@@ -20,7 +20,7 @@ interface Player {
   position?: string | null;
 }
 
-const ORDER: PlayerPosition[] = ['GK', 'CB', 'FB', 'WB', 'CDM', 'CM', 'CAM', 'WM', 'W', 'SS', 'ST'];
+const ORDER: PlayerPosition[] = ['GK', 'CB', 'FB', 'WB', 'CDM', 'CM', 'CAM', 'WM', 'W', 'SS', 'ST', 'UNI'];
 const short = (p: string) => (PLAYER_POSITION_SHORT as Record<string, string>)[p] ?? p;
 const label = (p: string) => (PLAYER_POSITION_LABELS_SK as Record<string, string>)[p]?.replace(/ \(.*\)$/, '') ?? p;
 
