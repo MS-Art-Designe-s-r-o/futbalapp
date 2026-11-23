@@ -306,11 +306,16 @@ export class RegistrationService {
     const parentOnly = request.applicantType === 'PARENT';
     const selectedIds = [...new Set(opts?.childMemberIds ?? [])];
 
-    // 1. hráč (dieťa alebo dospelý) ako člen — pri type PARENT sa hráč nevytvára
+    // Rodič (typ PARENT) doplnil cez odkaz údaje dieťaťa a nik nevybral existujúceho člena →
+    // dieťa sa vytvorí (alebo nájde) z doplnených údajov, aby nezostalo bez záznamu.
+    const createFromInfo =
+      parentOnly && selectedIds.length === 0 && !!request.infoReceivedAt && !!request.childFirstName && !!request.childLastName;
+
+    // 1. hráč (dieťa alebo dospelý) ako člen — pri type PARENT sa hráč vytvára len z doplnených údajov
     let player: { id: string; firstName: string; lastName: string } | null = null;
     let playerAccount: { email: string; tempPassword: string | null } | null = null;
     let reusedExisting = false;
-    if (!parentOnly) {
+    if (!parentOnly || createFromInfo) {
       // hráč už môže byť členom (import z futbalnetu, skoršia registrácia) —
       // vtedy sa nevytvára duplikát, len sa priradí k rodičovi
       const explicit = selectedIds[0]
