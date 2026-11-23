@@ -532,6 +532,55 @@ export class RegistrationService {
     };
   }
 
+  /**
+   * Ručné vytvorenie dieťaťa z údajov v prihláške (napr. keď sa pri schválení nevytvorilo).
+   * Zaradí ho do rodičom zvolenej skupiny (alebo podľa veku) a naviaže na konto rodiča, ak existuje.
+   */
+  async createChildFromRequest(id: string) {
+    const r = await this.prisma.registrationRequest.findUnique({ where: { id } });
+    if (!r) throw new NotFoundException('Prihláška neexistuje');
+    if (!r.childFirstName || !r.childLastName || !r.childBirthDate) {
+      throw new BadRequestException('V prihláške chýbajú údaje dieťaťa (meno, priezvisko, dátum narodenia)');
+    }
+    await this.saveChildFromInfo(
+      r,
+      {
+        firstName: r.childFirstName,
+        lastName: r.childLastName,
+        birthDate: r.childBirthDate.toISOString().slice(0, 10),
+        registrationNumber: r.playerRegistrationNumber ?? undefined,
+        motherClub: r.infoMotherClub ?? undefined,
+        guestClub: r.infoGuestClub ?? undefined,
+        clubAffiliation: r.infoClubAffiliation ?? undefined,
+        photoBase64: r.photoDataUrl ?? undefined,
+      } as RegistrationInfoInput,
+      r.requestedTeamId ?? undefined,
+    );
+    const fresh = await this.prisma.registrationRequest.findUnique({ where: { id } });
+    const memberId = fresh?.createdMemberId;
+    if (!memberId) throw new BadRequestException('Člena sa nepodarilo vytvoriť');
+
+    let linkedParent = false;
+    if (r.parentEmail) {
+      const user = await this.prisma.user.findFirst({ where: { email: { equals: r.parentEmail, mode: 'insensitive' } } });
+      if (user) {
+        await this.prisma.guardian.upsert({
+          where: { userId_memberId: { userId: user.id, memberId } },
+          create: { userId: user.id, memberId, relation: r.parentRelation ?? 'GUARDIAN' },
+          update: {},
+        });
+        linkedParent = true;
+      }
+    }
+    const season = await this.prisma.season.findFirst({ where: { isActive: true } });
+    if (season) await this.seasonsService.assignMemberships(season.id);
+    const member = await this.prisma.member.findUnique({
+      where: { id: memberId },
+      select: { id: true, firstName: true, lastName: true, memberships: { where: { leftAt: null }, select: { team: { select: { name: true } } } } },
+    });
+    return { member, linkedParent };
+  }
+
   /** Má člen prepojené prihlasovacie konto? */
   private async hasAccount(memberId: string): Promise<boolean> {
     const m = await this.prisma.member.findUnique({ where: { id: memberId }, select: { userId: true } });

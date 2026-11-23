@@ -96,6 +96,34 @@ function RegistrationHistory() {
   const [q, setQ] = useState('');
   const [rows, setRows] = useState<RegRequest[] | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [teams, setTeams] = useState<Array<{ id: string; name: string }>>([]);
+  const [busyId, setBusyId] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
+
+  useEffect(() => {
+    api<Array<{ id: string; name: string }>>('/seasons/teams').then(setTeams).catch(() => {});
+  }, []);
+
+  async function createChild(r: RegRequest) {
+    setBusyId(r.id);
+    setError(null);
+    setNotice(null);
+    try {
+      const res = await api<{ member: { firstName: string; lastName: string; memberships: Array<{ team: { name: string } }> } | null; linkedParent: boolean }>(
+        `/registration/${r.id}/create-child`,
+        { method: 'POST' },
+      );
+      const team = res.member?.memberships[0]?.team.name;
+      setNotice(
+        `Člen ${res.member?.firstName ?? ''} ${res.member?.lastName ?? ''} vytvorený${team ? ` (${team})` : ''}${res.linkedParent ? ', priradený rodičovi' : ', rodič zatiaľ nemá konto'}.`,
+      );
+      setRows((prev) => prev?.map((x) => (x.id === r.id ? { ...x, createdMemberId: res.member ? 'x' : x.createdMemberId } : x)) ?? prev);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Vytvorenie zlyhalo');
+    } finally {
+      setBusyId(null);
+    }
+  }
 
   useEffect(() => {
     const t = setTimeout(() => {
@@ -139,6 +167,7 @@ function RegistrationHistory() {
         />
       </div>
       <ErrorText>{error}</ErrorText>
+      {notice && <p className="text-sm text-green-700">{notice}</p>}
       {rows && rows.length === 0 && !error && <Card className="text-sm text-gray-500">Žiadne registrácie.</Card>}
       <div className="space-y-2">
         {(rows ?? []).map((r) => {
@@ -168,8 +197,33 @@ function RegistrationHistory() {
                   <p className="text-xs text-gray-400">
                     Prijaté {new Date(r.createdAt).toLocaleDateString('sk-SK')}
                     {r.reviewedAt ? ` · vybavené ${new Date(r.reviewedAt).toLocaleDateString('sk-SK')}` : ''}
-                    {r.status === 'APPROVED' && r.createdMemberId ? ' · člen vytvorený' : ''}
+                    {r.createdMemberId ? ' · člen vytvorený' : ''}
                   </p>
+                  {r.applicantType !== 'ADULT' && (r.infoReceivedAt || (r.applicantType === 'CHILD' && r.childFirstName)) && (
+                    <div className="mt-1 rounded bg-club-50 p-2 text-xs text-gray-700">
+                      <p className="font-semibold text-club-800">
+                        Údaje o dieťati{r.infoReceivedAt ? ` (doplnené ${new Date(r.infoReceivedAt).toLocaleDateString('sk-SK')})` : ''}
+                      </p>
+                      <p>
+                        {r.childFirstName} {r.childLastName}
+                        {r.childBirthDate ? ` · nar. ${new Date(r.childBirthDate).toLocaleDateString('sk-SK')}` : ''}
+                        {r.playerRegistrationNumber ? ` · reg. č. ${r.playerRegistrationNumber}` : ''}
+                      </p>
+                      <p>
+                        Skupina: {r.requestedTeamId ? teams.find((t) => t.id === r.requestedTeamId)?.name ?? r.requestedTeamId : '—'}
+                        {r.infoMotherClub ? ` · materský klub: ${r.infoMotherClub}` : ''}
+                        {r.infoGuestClub ? ` · hosťujúci: ${r.infoGuestClub}` : ''}
+                        {r.infoClubAffiliation ? ` · príslušnosť: ${r.infoClubAffiliation}` : ''}
+                      </p>
+                    </div>
+                  )}
+                  {r.applicantType === 'PARENT' && r.infoReceivedAt && !r.createdMemberId && (
+                    <div className="mt-2">
+                      <Button onClick={() => void createChild(r)} disabled={busyId === r.id}>
+                        {busyId === r.id ? 'Vytváram…' : 'Vytvoriť člena z týchto údajov'}
+                      </Button>
+                    </div>
+                  )}
                 </div>
                 <span className={`rounded px-2 py-1 text-xs font-medium ${st.cls}`}>{st.label}</span>
               </div>

@@ -82,6 +82,13 @@ export class RegistrationController {
     return this.registrationService.approve(id, user.id, { childMemberIds: body?.childMemberIds });
   }
 
+  /** Z údajov dieťaťa v prihláške vytvorí člena (zaradí do zvolenej skupiny a naviaže na rodiča, ak má konto). */
+  @Post(':id/create-child')
+  @Roles('ADMIN', 'MANAGER')
+  createChild(@Param('id') id: string) {
+    return this.registrationService.createChildFromRequest(id);
+  }
+
   @Post(':id/reject')
   @Roles('ADMIN', 'MANAGER')
   reject(@Param('id') id: string, @CurrentUser() user: AuthUser) {
