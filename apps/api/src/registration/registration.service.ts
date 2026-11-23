@@ -231,8 +231,84 @@ export class RegistrationService {
         infoReceivedAt: new Date(),
       },
     });
+    // rodič (typ PARENT) nemá dieťa v klube → dieťa sa hneď uloží do ním zvolenej skupiny
+    if (r.applicantType === 'PARENT') {
+      await this.saveChildFromInfo(r, input, teamId).catch((e) =>
+        this.logger.warn(`Uloženie dieťaťa z doplnených údajov zlyhalo: ${e instanceof Error ? e.message : e}`),
+      );
+    }
     await this.notifyInfoReceived(`${input.firstName} ${input.lastName}`);
     return { ok: true };
+  }
+
+  /**
+   * Vytvorí (alebo nájde/aktualizuje) člena-dieťa z údajov doplnených rodičom a zaradí ho
+   * do rodičom zvolenej skupiny v aktívnej sezóne. Väzba na rodiča vznikne až pri schválení.
+   */
+  private async saveChildFromInfo(
+    r: { id: string; createdMemberId: string | null; requestedTeamId: string | null; photoDataUrl: string | null; healthNotes: string | null },
+    input: RegistrationInfoInput,
+    teamId: string | undefined,
+  ) {
+    const birthDate = new Date(`${input.birthDate}T00:00:00Z`);
+    const fields = {
+      firstName: input.firstName,
+      lastName: input.lastName,
+      birthDate,
+      registrationNumber: input.registrationNumber || undefined,
+      homeClub: input.motherClub || undefined,
+      guestClub: input.guestClub || undefined,
+      clubAffiliation: input.clubAffiliation || undefined,
+    };
+    let member = r.createdMemberId ? await this.prisma.member.findUnique({ where: { id: r.createdMemberId } }) : null;
+    if (!member) {
+      member = await this.findExistingMember({
+        playerRegistrationNumber: input.registrationNumber || null,
+        birthNumber: null,
+        childFirstName: input.firstName,
+        childLastName: input.lastName,
+        childBirthDate: birthDate,
+      });
+    }
+    const isNew = !member;
+    if (member) {
+      // existujúceho člena neprepisujeme natvrdo — dopĺňame len prázdne polia (okrem opravy zadanej rodičom pri vlastnom zázname)
+      const own = member.id === r.createdMemberId;
+      member = await this.prisma.member.update({
+        where: { id: member.id },
+        data: own
+          ? fields
+          : {
+              registrationNumber: member.registrationNumber ?? fields.registrationNumber,
+              homeClub: member.homeClub ?? fields.homeClub,
+              guestClub: member.guestClub ?? fields.guestClub,
+              clubAffiliation: member.clubAffiliation ?? fields.clubAffiliation,
+            },
+      });
+    } else {
+      member = await this.prisma.member.create({ data: { ...fields, healthNotes: r.healthNotes } });
+    }
+    if (input.photoBase64 && (isNew || member.id === r.createdMemberId)) {
+      await this.prisma.memberPhoto.deleteMany({ where: { memberId: member.id } });
+      await this.prisma.memberPhoto.create({ data: { memberId: member.id, dataUrl: input.photoBase64 } });
+      await this.prisma.member.update({ where: { id: member.id }, data: { photoUrl: `/members/${member.id}/photo` } });
+    }
+
+    const season = await this.prisma.season.findFirst({ where: { isActive: true } });
+    if (season && teamId) {
+      // rodič skupinu zmenil → pôvodná skupina z predchádzajúceho odoslania sa zruší
+      if (r.requestedTeamId && r.requestedTeamId !== teamId && member.id === r.createdMemberId) {
+        await this.prisma.teamMembership.deleteMany({
+          where: { memberId: member.id, seasonId: season.id, teamId: r.requestedTeamId },
+        });
+      }
+      await this.prisma.teamMembership.upsert({
+        where: { memberId_seasonId_teamId: { memberId: member.id, seasonId: season.id, teamId } },
+        create: { memberId: member.id, seasonId: season.id, teamId },
+        update: { leftAt: null },
+      });
+    }
+    await this.prisma.registrationRequest.update({ where: { id: r.id }, data: { createdMemberId: member.id } });
   }
 
   /** Best-effort: upozorní vedenie, že rodič doplnil údaje. */
@@ -322,7 +398,11 @@ export class RegistrationService {
         ? await this.prisma.member.findUnique({ where: { id: selectedIds[0] } })
         : null;
       if (selectedIds[0] && !explicit) throw new BadRequestException('Vybraný člen neexistuje');
-      const existing = explicit ?? (await this.findExistingMember(request));
+      const fromInfo =
+        !explicit && createFromInfo && request.createdMemberId
+          ? await this.prisma.member.findUnique({ where: { id: request.createdMemberId } })
+          : null;
+      const existing = explicit ?? fromInfo ?? (await this.findExistingMember(request));
 
       if (existing) {
         player = existing;
