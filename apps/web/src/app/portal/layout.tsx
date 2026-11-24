@@ -75,7 +75,16 @@ export default function PortalLayout({ children }: { children: React.ReactNode }
     active ? 'border-b-[3px] border-club-500 py-1 font-bold text-white' : 'py-1 text-club-200 hover:text-[var(--lime)]';
 
   return (
-    <div className="min-h-screen bg-[var(--bg)]">
+    <div className="relative isolate min-h-screen bg-[var(--bg)]">
+      {/* pozadie ako na webe fkknv.sk (štadión) — stlmené, aby zostal obsah čitateľný */}
+      <div
+        aria-hidden
+        className="pointer-events-none fixed inset-0 -z-10 bg-cover bg-top"
+        style={{
+          backgroundImage:
+            "linear-gradient(180deg, rgba(8,14,19,.72) 0%, rgba(8,14,19,.86) 55%, rgba(8,14,19,.94) 100%), url('/verejne/hero-bg-v2.jpg')",
+        }}
+      />
       <header className="relative border-b border-club-100 bg-club-900 text-white">
         <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-2 px-6 py-3">
           <div className="flex flex-wrap items-center gap-x-6 gap-y-2">
