@@ -10,6 +10,7 @@ import { AddressLink } from '@/components/AddressLink';
 import { MapEmbed } from '@/components/MapEmbed';
 import { TrainingIcon, trainingLabel } from '@/components/training-icon';
 import { EventAdminActions } from '@/components/event-admin-actions';
+import { MatchMedia, type MatchPhotoItem, type MatchVideoItem } from '@/components/match-media';
 
 interface AttendanceRow {
   id: string;
@@ -27,6 +28,11 @@ interface EventDetail {
   recurrenceGroupId: string | null;
   team: { id: string; name: string; isGoalkeeperGroup?: boolean; teamCategory?: { code: string } } | null;
   attendances: AttendanceRow[];
+}
+
+interface TrainingMedia {
+  photos: MatchPhotoItem[];
+  videos: MatchVideoItem[];
 }
 
 const STATUSES = ['PRESENT', 'ABSENT', 'EXCUSED', 'INJURED', 'SICK'] as const;
@@ -51,6 +57,7 @@ export default function AttendancePage({ params }: { params: Promise<{ id: strin
   const { id } = use(params);
   const { me } = useMe();
   const [event, setEvent] = useState<EventDetail | null>(null);
+  const [media, setMedia] = useState<TrainingMedia>({ photos: [], videos: [] });
   const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
@@ -61,9 +68,18 @@ export default function AttendancePage({ params }: { params: Promise<{ id: strin
     }
   }, [id]);
 
+  const loadMedia = useCallback(async () => {
+    try {
+      setMedia(await api<TrainingMedia>(`/events/${id}/media`));
+    } catch {
+      // médiá smie vidieť len tréner/vedenie — inak ostanú prázdne
+    }
+  }, [id]);
+
   useEffect(() => {
     void load();
-  }, [load]);
+    void loadMedia();
+  }, [load, loadMedia]);
 
   async function setStatus(row: AttendanceRow, status: string) {
     // opätovný klik na už zvolený stav ho zruší (žiadna voľba = UNKNOWN)
@@ -80,7 +96,10 @@ export default function AttendancePage({ params }: { params: Promise<{ id: strin
   const present = event?.attendances.filter((a) => a.status === 'PRESENT').length ?? 0;
   // vedenie spravuje všetko; tréner len udalosti svojich družstiev
   const canEdit =
-    isStaff(me) || (!!event?.team && coachTeams(me).some((t) => t.id === event.team!.id));
+    isStaff(me) ||
+    (!!event?.team && coachTeams(me).some((t) => t.id === event.team!.id)) ||
+    // tréner brankárov smie spravovať tréningy ktorejkoľvek skupiny Brankári
+    (!!event?.team?.isGoalkeeperGroup && !!me?.roles.some((r) => r.role === 'GK_COACH'));
 
   return (
     <div className="space-y-5">
@@ -170,6 +189,21 @@ export default function AttendancePage({ params }: { params: Promise<{ id: strin
               )}
             </ul>
           </Card>
+
+          {canEdit && (
+            <section>
+              <h2 className="mb-3 font-semibold text-club-800">Video a fotky z tréningu</h2>
+              <MatchMedia
+                matchId={event.id}
+                basePath="/events"
+                subject="z tréningu"
+                manage
+                photos={media.photos}
+                videos={media.videos}
+                onChanged={loadMedia}
+              />
+            </section>
+          )}
         </>
       )}
     </div>

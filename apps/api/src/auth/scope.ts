@@ -5,6 +5,11 @@ export function isStaff(user: AuthUser): boolean {
   return user.roles.some((r) => r.role === 'ADMIN' || r.role === 'MANAGER');
 }
 
+/** Tréner brankárov — smie spravovať brankárske tréningy ktorejkoľvek skupiny Brankári. */
+export function isGkCoach(user: AuthUser): boolean {
+  return user.roles.some((r) => r.role === 'GK_COACH');
+}
+
 /** Má používateľ trénerskú rolu (aspoň jedného družstva)? */
 export function isCoach(user: AuthUser): boolean {
   return user.roles.some((r) => r.role === 'COACH');

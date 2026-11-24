@@ -50,8 +50,6 @@ function kindOf(file: File): Kind | null {
   return null;
 }
 
-const photoUrl = (id: string) => `${API_URL}/matches/photos/${id}`;
-const videoUrl = (id: string) => `${API_URL}/matches/videos/${id}`;
 
 /**
  * Médiá zo zápasu — výrazné nahrávanie fotiek a videí (galéria aj priamo fotoaparát
@@ -63,13 +61,21 @@ export function MatchMedia({
   photos,
   videos,
   onChanged,
+  basePath = '/matches',
+  subject = 'zo zápasu',
 }: {
   matchId: string;
+  /** '/matches' (zápas) alebo '/events' (tréning) */
+  basePath?: '/matches' | '/events';
+  /** doplnok do nadpisov: „zo zápasu“ / „z tréningu“ */
+  subject?: string;
   manage: boolean;
   photos: MatchPhotoItem[];
   videos: MatchVideoItem[];
   onChanged: () => Promise<void> | void;
 }) {
+  const photoUrl = (id: string) => `${API_URL}${basePath}/photos/${id}`;
+  const videoUrl = (id: string) => `${API_URL}${basePath}/videos/${id}`;
   const [queue, setQueue] = useState<QueueItem[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [dragOver, setDragOver] = useState(false);
@@ -97,7 +103,7 @@ export function MatchMedia({
       for (;;) {
         const next = queueRef.current.find((q) => q.status === 'waiting');
         if (!next) break;
-        const path = next.kind === 'photo' ? `/matches/${matchId}/photos` : `/matches/${matchId}/videos`;
+        const path = next.kind === 'photo' ? `${basePath}/${matchId}/photos` : `${basePath}/${matchId}/videos`;
         const handle = apiUploadWithProgress<unknown>(path, next.file, (f) => patch(next.key, { progress: f }));
         patch(next.key, { status: 'uploading', handle });
         // queueRef sa aktualizuje až po renderi — označíme hneď, aby sa položka nezobrala znova
@@ -182,7 +188,7 @@ export function MatchMedia({
     if (!window.confirm('Zmazať túto fotku?')) return;
     setError(null);
     try {
-      await api(`/matches/${matchId}/photos/${photoId}`, { method: 'DELETE' });
+      await api(`${basePath}/${matchId}/photos/${photoId}`, { method: 'DELETE' });
       await onChanged();
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Zmazanie fotky zlyhalo');
@@ -193,7 +199,7 @@ export function MatchMedia({
     if (!window.confirm('Zmazať toto video?')) return;
     setError(null);
     try {
-      await api(`/matches/${matchId}/videos/${videoId}`, { method: 'DELETE' });
+      await api(`${basePath}/${matchId}/videos/${videoId}`, { method: 'DELETE' });
       await onChanged();
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Zmazanie videa zlyhalo');
@@ -226,7 +232,7 @@ export function MatchMedia({
           }`}
         >
           <div className="mb-3 flex flex-wrap items-baseline justify-between gap-2">
-            <span className="fk-kicker">Pridať médiá zo zápasu</span>
+            <span className="fk-kicker">Pridať médiá {subject}</span>
             <span className="hidden text-xs text-gray-500 sm:inline">alebo sem súbory pretiahnite myšou</span>
           </div>
           <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
@@ -402,7 +408,7 @@ export function MatchMedia({
                   {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img
                     src={photoUrl(p.id)}
-                    alt="Fotka zo zápasu"
+                    alt={`Fotka ${subject}`}
                     loading="lazy"
                     className="aspect-square w-full rounded-md object-cover"
                   />

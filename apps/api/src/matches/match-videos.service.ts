@@ -120,9 +120,11 @@ export class MatchVideosService implements OnModuleInit {
       return;
     }
     if (!names.length) return;
-    const known = new Set(
-      (await this.prisma.matchVideo.findMany({ select: { storagePath: true } })).map((v) => v.storagePath),
-    );
+    // súbory videí zápasov aj tréningov (spoločný adresár)
+    const known = new Set([
+      ...(await this.prisma.matchVideo.findMany({ select: { storagePath: true } })).map((v) => v.storagePath),
+      ...(await this.prisma.eventVideo.findMany({ select: { storagePath: true } })).map((v) => v.storagePath),
+    ]);
     const cutoff = Date.now() - 6 * 3600 * 1000;
     let removed = 0;
     for (const name of names) {

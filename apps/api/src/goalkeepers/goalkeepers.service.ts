@@ -137,9 +137,9 @@ export class GoalkeepersService implements OnApplicationBootstrap {
     const gkCoaches = await this.prisma.userRole.findMany({ where: { role: 'GK_COACH' as never }, select: { userId: true } });
     const coachIds = [...new Set(gkCoaches.map((c) => c.userId))];
     const wanted = new Set<string>();
-    for (const [teamId, members] of desired) {
-      if (!members.size) continue;
-      for (const userId of coachIds) wanted.add(`${userId}|${teamId}`);
+    // tréner brankárov dostane scope na VŠETKY skupiny Brankári (aj momentálne prázdne)
+    for (const team of allGkTeams) {
+      for (const userId of coachIds) wanted.add(`${userId}|${team.id}`);
     }
     // každý tréner bežného družstva smie vytvárať brankárske tréningy: dostane scope na skupinu
     // „<družstvo> Brankári“ svojej kategórie a na spoločnú „Brankári (všetci)“

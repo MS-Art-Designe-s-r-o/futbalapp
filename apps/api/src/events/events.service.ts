@@ -14,7 +14,7 @@ import { ClubsService } from '../clubs/clubs.service';
 import { EmailService } from '../notifications/email.service';
 import { bySlovakName } from '../members/members.service';
 import { resolveParticipantClubs } from './tournament-clubs';
-import { canManageTeam, coachBlockedFromTeam, coachTeamIds, isDemoScope, isStaff } from '../auth/scope';
+import { canManageTeam, coachBlockedFromTeam, coachTeamIds, isDemoScope, isGkCoach, isStaff } from '../auth/scope';
 import type { AuthUser } from '../auth/current-user.decorator';
 
 /** Tréning iného družstva na rovnakej ploche v rovnakom čase. */
@@ -108,7 +108,12 @@ export class EventsService {
    * len to družstvo (musí byť jeho, inak prázdne). Žiadne iné družstvá.
    */
   async listForCoach(params: { teamId?: string; from?: Date; to?: Date; type?: string }, user: AuthUser) {
-    const coachIds = coachTeamIds(user);
+    let coachIds = coachTeamIds(user);
+    // tréner brankárov vidí tréningy všetkých skupín Brankári (bez ohľadu na zaškrtnuté skupiny)
+    if (isGkCoach(user)) {
+      const gk = await this.prisma.team.findMany({ where: { isGoalkeeperGroup: true, isDemo: false }, select: { id: true } });
+      coachIds = [...new Set([...coachIds, ...gk.map((t) => t.id)])];
+    }
     const teamFilter =
       params.teamId
         ? coachIds.includes(params.teamId)
@@ -309,6 +314,17 @@ export class EventsService {
    * pri MATCH/TOURNAMENT vytvorí Match záznam.
    */
   /** Skupiny brankárov: nevedenie (tréner) smie pre ne vytvárať len tréningy — nie zápasy, turnaje ani rodičovské. */
+  /**
+   * Smie používateľ spravovať udalosti družstva? Vedenie všetko, tréner svoje družstvá a tréner
+   * brankárov (rola GK_COACH) aj ktorúkoľvek skupinu Brankári — bez ohľadu na zaškrtnuté skupiny.
+   */
+  async canManage(user: AuthUser, teamId: string | null | undefined): Promise<boolean> {
+    if (canManageTeam(user, teamId)) return true;
+    if (!teamId || !isGkCoach(user)) return false;
+    const team = await this.prisma.team.findUnique({ where: { id: teamId }, select: { isGoalkeeperGroup: true } });
+    return !!team?.isGoalkeeperGroup;
+  }
+
   async assertGkTeamsOnlyTraining(user: AuthUser, type: string, teamIds: Array<string | undefined | null>) {
     if (isStaff(user) || type === 'TRAINING') return;
     const ids = [...new Set(teamIds.filter((x): x is string => !!x))];
@@ -495,7 +511,7 @@ export class EventsService {
   async update(eventId: string, input: Partial<CreateEventInput>, user: AuthUser) {
     const event = await this.prisma.event.findUnique({ where: { id: eventId } });
     if (!event) throw new NotFoundException('Udalosť neexistuje');
-    if (!canManageTeam(user, event.teamId)) throw new ForbiddenException('Túto udalosť nemôžete upravovať');
+    if (!(await this.canManage(user, event.teamId))) throw new ForbiddenException('Túto udalosť nemôžete upravovať');
     // zmena typu tréningu: futbalový ↔ brankársky = prepnutie družstva udalosti
     // (bežné družstvo ↔ skupina „… Brankári“ rovnakej kategórie alebo „Brankári (všetci)“)
     let newTeamId: string | undefined;
@@ -509,7 +525,7 @@ export class EventsService {
       if (!newTeam || !oldTeam) throw new BadRequestException('Družstvo neexistuje');
       const sameCategory = oldTeam.teamCategoryId === newTeam.teamCategoryId;
       const toGk = newTeam.isGoalkeeperGroup && (sameCategory || newTeam.name === 'Brankári (všetci)');
-      if (!isStaff(user) && !canManageTeam(user, newTeam.id) && !toGk) {
+      if (!isStaff(user) && !(await this.canManage(user, newTeam.id)) && !toGk) {
         throw new ForbiddenException('Tréning nemôžete presunúť do tohto družstva');
       }
       if (!isStaff(user) && !sameCategory && !toGk) throw new ForbiddenException('Tréning nemôžete presunúť do tohto družstva');
@@ -655,7 +671,7 @@ export class EventsService {
   async remove(eventId: string, scope: 'one' | 'future', user: AuthUser) {
     const event = await this.prisma.event.findUnique({ where: { id: eventId } });
     if (!event) throw new NotFoundException('Udalosť neexistuje');
-    if (!canManageTeam(user, event.teamId)) throw new ForbiddenException('Túto udalosť nemôžete odstrániť');
+    if (!(await this.canManage(user, event.teamId))) throw new ForbiddenException('Túto udalosť nemôžete odstrániť');
     if (scope === 'future' && event.recurrenceGroupId) {
       const res = await this.prisma.event.deleteMany({
         where: { recurrenceGroupId: event.recurrenceGroupId, startAt: { gte: event.startAt } },
@@ -677,7 +693,7 @@ export class EventsService {
     if (!base) throw new NotFoundException('Udalosť neexistuje');
     // Detail tréningu (dochádzku) smie otvoriť len vedenie klubu a tréner daného
     // družstva — rodič/hráč nemá vidieť dochádzku iných detí.
-    if (!canManageTeam(user, base.teamId)) throw new ForbiddenException('Dochádzka je len pre tréner družstva a vedenie');
+    if (!(await this.canManage(user, base.teamId))) throw new ForbiddenException('Dochádzka je len pre tréner družstva a vedenie');
     if (base.teamId) await this.prepareAttendance(base.id, base.teamId, base.seasonId);
 
     const event = await this.prisma.event.findUnique({

@@ -706,6 +706,8 @@ model Event {
   pitch       Pitch?       @relation(fields: [pitchId], references: [id], onDelete: SetNull)
   attendances Attendance[]
   match       Match?
+  photos      EventPhoto[]
+  videos      EventVideo[]
   /// Družstvá, ktorých sa udalosť týka (napr. rodičovské združenie pre viac
   /// družstiev naraz). Prázdne = celoklubová udalosť. Používa sa nad rámec
   /// jediného `teamId` pri udalostiach smerovaných na viacero družstiev.
@@ -920,6 +922,38 @@ model MatchPhoto {
   createdAt    DateTime @default(now())
 
   match        Match    @relation(fields: [matchId], references: [id], onDelete: Cascade)
+}
+
+/// Fotky z tréningu (rovnako ako MatchPhoto: binárne dáta, servírované cez neuhádnuteľné ID).
+model EventPhoto {
+  id           String   @id @default(cuid())
+  eventId      String
+  mimeType     String
+  size         Int
+  data         Bytes
+  uploadedById String?
+  createdAt    DateTime @default(now())
+
+  event        Event    @relation(fields: [eventId], references: [id], onDelete: Cascade)
+
+  @@index([eventId])
+}
+
+/// Videá z tréningu nahrané z telefónu (súbor na disku v UPLOADS_DIR/videos, ako MatchVideo).
+model EventVideo {
+  id           String   @id @default(cuid())
+  eventId      String
+  mimeType     String
+  size         Int
+  filename     String?
+  storagePath  String   @unique
+  title        String?
+  uploadedById String?
+  createdAt    DateTime @default(now())
+
+  event        Event    @relation(fields: [eventId], references: [id], onDelete: Cascade)
+
+  @@index([eventId])
 }
 
 /// Videá zo zápasu nahrané z telefónu. Súbor je na disku (UPLOADS_DIR/videos/<storagePath>),
