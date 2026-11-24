@@ -20,6 +20,7 @@ interface EventItem {
   location: string | null;
   address?: string | null;
   parentEventId?: string | null;
+  _count?: { photos: number; videos: number };
   tournamentOrder?: number | null;
   parent?: { id: string; title: string } | null;
   team: { id: string; name: string; isGoalkeeperGroup?: boolean } | null;
@@ -183,6 +184,12 @@ export default function DashboardScreen() {
               {item.team ? ` · ${item.team.name}` : ''}
             </Text>
           </View>
+          {item.type === 'TRAINING' && canManage(me) && ((item._count?.videos ?? 0) > 0 || (item._count?.photos ?? 0) > 0) && (
+            <Text style={styles.nomBadge} accessibilityLabel="Tréning obsahuje video alebo fotky">
+              {(item._count?.videos ?? 0) > 0 ? '🎥' : ''}
+              {(item._count?.photos ?? 0) > 0 ? '📷' : ''}
+            </Text>
+          )}
           {item.match?.isFriendly && <Text style={styles.nomBadge}>Priateľský</Text>}
           {isNominated && <Text style={styles.nomBadge}>Nominovaný</Text>}
         </View>

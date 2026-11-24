@@ -34,6 +34,8 @@ const EVENT_INCLUDE = {
   audienceTeams: { select: { id: true, name: true }, orderBy: { sortOrder: 'asc' } },
   /// zápas turnaja → odkaz späť na turnaj
   parent: { select: { id: true, title: true } },
+  /// počet fotiek/videí z tréningu (ikonka v kalendári)
+  _count: { select: { photos: true, videos: true } },
 } as const;
 
 @Injectable()

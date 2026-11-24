@@ -18,6 +18,7 @@ import { api, ApiError } from '@/lib/api';
 import { canManage, canManageTeam, coachTeams, isStaff, useMe, type Me } from '@/lib/auth';
 import { Button, Card, ErrorText, Modal, inputCls, labelCls } from '@/components/ui';
 import { ClubPicker } from '@/components/club-picker';
+import { MediaBadge } from '@/components/video-icon';
 import { ParentMeetingIcon, TrainingIcon, trainingLabel } from '@/components/training-icon';
 import { JerseyBadges, JerseyIcon, JerseyPicker, type JerseyColor } from '@/components/jersey';
 import { AddressField, PitchPicker } from '@/components/pitch-picker';
@@ -56,6 +57,7 @@ interface EventItem {
   audienceTeams?: Array<{ id: string; name: string }>;
   parentEventId?: string | null;
   parent?: { id: string; title: string } | null;
+  _count?: { photos: number; videos: number };
   tournamentOrder?: number | null;
   match: {
     isFriendly?: boolean;
@@ -513,6 +515,7 @@ function EventList({
                 >
                   {e.type === 'TRAINING' && <TrainingIcon goalkeeper={!!e.team?.isGoalkeeperGroup} size={20} />}
                   {e.type === 'PARENT_MEETING' && <ParentMeetingIcon size={20} />}
+                  {e.type === 'TRAINING' && canManage(me) && <MediaBadge photos={e._count?.photos} videos={e._count?.videos} size={14} />}
                   {typeLabel(e)}
                   {e.team ? ` · ${compactTeam(e.team.name)}` : ''}
                   {e.recurrenceGroupId ? ' · séria' : ''}
@@ -722,7 +725,7 @@ function MonthView({
                             }`}
                             style={{ backgroundColor: c.bg, color: c.text, borderLeft: `3px solid ${c.text}` }}
                           >
-                            {jersey}{trainIcon}
+                            {jersey}{trainIcon}{e.type === 'TRAINING' && canManage(me) ? <MediaBadge photos={e._count?.photos} videos={e._count?.videos} /> : null}
                             <span className="truncate"><b className="mr-1 font-bold tabular-nums">{time}</b>{label}</span>
                           </Link>
                         ) : (
@@ -734,7 +737,7 @@ function MonthView({
                             }`}
                             style={{ backgroundColor: c.bg, color: c.text, borderLeft: `3px solid ${c.text}` }}
                           >
-                            {jersey}{trainIcon}
+                            {jersey}{trainIcon}{e.type === 'TRAINING' && canManage(me) ? <MediaBadge photos={e._count?.photos} videos={e._count?.videos} /> : null}
                             <span className="truncate"><b className="mr-1 font-bold tabular-nums">{time}</b>{label}</span>
                           </div>
                         );
