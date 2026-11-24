@@ -18,7 +18,7 @@ import { api, ApiError } from '@/lib/api';
 import { canManage, canManageTeam, coachTeams, isStaff, useMe, type Me } from '@/lib/auth';
 import { Button, Card, ErrorText, Modal, inputCls, labelCls } from '@/components/ui';
 import { ClubPicker } from '@/components/club-picker';
-import { TrainingIcon, trainingLabel } from '@/components/training-icon';
+import { ParentMeetingIcon, TrainingIcon, trainingLabel } from '@/components/training-icon';
 import { JerseyBadges, JerseyIcon, JerseyPicker, type JerseyColor } from '@/components/jersey';
 import { AddressField, PitchPicker } from '@/components/pitch-picker';
 
@@ -512,6 +512,7 @@ function EventList({
                   style={{ backgroundColor: c.bg, color: c.text }}
                 >
                   {e.type === 'TRAINING' && <TrainingIcon goalkeeper={!!e.team?.isGoalkeeperGroup} size={20} />}
+                  {e.type === 'PARENT_MEETING' && <ParentMeetingIcon size={20} />}
                   {typeLabel(e)}
                   {e.team ? ` · ${compactTeam(e.team.name)}` : ''}
                   {e.recurrenceGroupId ? ' · séria' : ''}
@@ -688,7 +689,12 @@ function MonthView({
                             ? `${e.team ? `${compactTeam(e.team.name)} ` : ''}⚽ ${e.match.opponent}`
                             : `${e.team ? `${compactTeam(e.team.name)} ` : ''}${typeLabel(e)}`
                         }${e.match?.isFriendly ? ' (prát.)' : ''}${isNominated ? ' ✓' : ''}`;
-                        const trainIcon = e.type === 'TRAINING' ? <TrainingIcon goalkeeper={!!e.team?.isGoalkeeperGroup} size={15} /> : null;
+                        const trainIcon =
+                          e.type === 'TRAINING' ? (
+                            <TrainingIcon goalkeeper={!!e.team?.isGoalkeeperGroup} size={15} />
+                          ) : e.type === 'PARENT_MEETING' ? (
+                            <ParentMeetingIcon size={15} />
+                          ) : null;
                         const jc = e.match?.jerseyColors ?? [];
                         const jersey =
                           jc.length > 0 ? (
