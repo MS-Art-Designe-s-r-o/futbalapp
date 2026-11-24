@@ -72,7 +72,7 @@ export class MatchesService {
   }
 
   /** Odohrané (ukončené) zápasy — archív s videom a fotkami, od najnovšieho. */
-  async playedMatches(user: AuthUser, opts: { mine?: boolean; limit?: number } = {}) {
+  async playedMatches(user: AuthUser, opts: { mine?: boolean; limit?: number; media?: boolean } = {}) {
     // „moje" (prehľad): vedenie všetko; ostatní len družstvá, kde sú tréner/hráč/rodič
     let teamFilter: { teamId: { in: string[] } } | undefined;
     if (opts.mine && !isStaff(user)) {
@@ -88,11 +88,26 @@ export class MatchesService {
       teamFilter = { teamId: { in: [...ids] } };
     }
     return this.prisma.match.findMany({
-      where: { state: 'FINISHED', event: { isDemo: !!user.isDemo, ...teamFilter } },
+      // media: každý zápas, ku ktorému je video/highlighty/fotky (aj neukončený); inak archív ukončených
+      where: {
+        ...(opts.media
+          ? {
+              OR: [
+                { videoUrl: { not: '' } },
+                { highlightsUrl: { not: '' } },
+                { photos: { some: {} } },
+                { videos: { some: {} } },
+              ],
+            }
+          : { state: 'FINISHED' as const }),
+        event: { isDemo: !!user.isDemo, ...teamFilter },
+      },
       select: {
         id: true,
         opponent: true,
         opponentLogo: true,
+        sportnetUrl: true,
+        state: true,
         isFriendly: true,
         isHome: true,
         scoreUs: true,
@@ -107,17 +122,17 @@ export class MatchesService {
             startAt: true,
             location: true,
             address: true,
-            team: { select: { name: true } },
+            team: { select: { id: true, name: true } },
             parentEventId: true,
             tournamentOrder: true,
             parent: { select: { id: true, title: true } },
           },
         },
         photos: { select: { id: true }, orderBy: { createdAt: 'asc' } },
-        videos: { select: { id: true, mimeType: true, title: true }, orderBy: { createdAt: 'asc' } },
+        videos: { select: { id: true, mimeType: true, title: true, filename: true, size: true }, orderBy: { createdAt: 'asc' } },
       },
       orderBy: { event: { startAt: 'desc' } },
-      take: opts.limit ?? 200,
+      take: opts.limit ?? (opts.media ? 500 : 200),
     });
   }
 

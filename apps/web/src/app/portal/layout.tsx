@@ -6,6 +6,7 @@ import { usePathname, useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { api, getToken, setToken } from '@/lib/api';
 import { canManage, isGkCoachOnly, isStaff, useMe } from '@/lib/auth';
+import { VideoIcon } from '@/components/video-icon';
 
 const PUBLIC_SITE_URL = 'https://fkknv.sk';
 
@@ -14,6 +15,8 @@ interface Leaf {
   href: string;
   label: string;
   show: (ctx: Ctx) => boolean;
+  /** ikona namiesto textu (s popisom pre čítačky) */
+  icon?: 'video';
 }
 type Entry = ({ kind: 'leaf' } & Leaf) | { kind: 'group'; label: string; children: Leaf[] };
 
@@ -36,6 +39,7 @@ const navigation: Entry[] = [
     ],
   },
   { kind: 'leaf', href: '/portal/udalosti', label: 'Kalendár', show: () => true },
+  { kind: 'leaf', href: '/portal/video', label: 'Video', icon: 'video', show: ({ manage }) => manage },
   { kind: 'leaf', href: '/portal/tabulka', label: 'Tabuľka', show: () => true },
   { kind: 'leaf', href: '/portal/prehlady', label: 'Štatistiky', show: ({ manage, gkOnly }) => manage && !gkOnly },
   { kind: 'leaf', href: '/portal/ulohy', label: 'Úlohy', show: ({ manage, gkOnly }) => manage && !gkOnly },
@@ -97,8 +101,15 @@ export default function PortalLayout({ children }: { children: React.ReactNode }
                 if (entry.kind === 'leaf') {
                   if (!entry.show(ctx)) return null;
                   return (
-                    <Link key={entry.href} href={entry.href} className={flatCls(isActive(entry.href))}>
-                      {entry.label}
+                    <Link key={entry.href} href={entry.href} className={flatCls(isActive(entry.href))} title={entry.label}>
+                      {entry.icon === 'video' ? (
+                        <span className="inline-flex items-center gap-1.5">
+                          <VideoIcon size={18} />
+                          <span className="sr-only">{entry.label}</span>
+                        </span>
+                      ) : (
+                        entry.label
+                      )}
                     </Link>
                   );
                 }

@@ -66,10 +66,16 @@ export class MatchesController {
 
   /** Odohrané zápasy (archív s videom a fotkami), od najnovšieho. */
   @Get('played')
-  played(@CurrentUser() user: AuthUser, @Query('mine') mine?: string, @Query('limit') limit?: string) {
+  played(
+    @CurrentUser() user: AuthUser,
+    @Query('mine') mine?: string,
+    @Query('limit') limit?: string,
+    @Query('media') media?: string,
+  ) {
     const n = Number(limit);
     return this.matchesService.playedMatches(user, {
       mine: mine === 'true',
+      media: media === 'true',
       limit: Number.isInteger(n) && n > 0 && n <= 200 ? n : undefined,
     });
   }
