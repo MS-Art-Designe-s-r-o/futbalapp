@@ -9,6 +9,7 @@ import { registerForPushNotifications } from '@/notifications';
 import { canManage, canManageTeam, fetchMe, isParent, type Me } from '@/auth';
 import { ui } from '@/theme';
 import { JerseyPair, jerseyList } from '@/JerseySwatch';
+import { ParentMeetingIcon } from '@/ParentMeetingIcon';
 import { checkForUpdateNow, runningBundleLabel } from '@/updates';
 
 interface EventItem {
@@ -171,10 +172,17 @@ export default function DashboardScreen() {
     return (
       <Pressable style={styles.card} onPress={() => openEvent(item)} disabled={!openable}>
         <View style={styles.badgeRow}>
-          <Text style={styles.badge}>
-            {item.type === 'TRAINING' ? (item.team?.isGoalkeeperGroup ? 'Brankársky tréning' : 'Futbalový tréning') : typeLabels[item.type] ?? item.type}
-            {item.team ? ` · ${item.team.name}` : ''}
-          </Text>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flexShrink: 1 }}>
+            {item.type === 'PARENT_MEETING' && (
+              <View style={{ marginBottom: 4 }}>
+                <ParentMeetingIcon height={14} />
+              </View>
+            )}
+            <Text style={styles.badge}>
+              {item.type === 'TRAINING' ? (item.team?.isGoalkeeperGroup ? 'Brankársky tréning' : 'Futbalový tréning') : typeLabels[item.type] ?? item.type}
+              {item.team ? ` · ${item.team.name}` : ''}
+            </Text>
+          </View>
           {item.match?.isFriendly && <Text style={styles.nomBadge}>Priateľský</Text>}
           {isNominated && <Text style={styles.nomBadge}>Nominovaný</Text>}
         </View>
