@@ -21,7 +21,8 @@ import { ClubPicker } from '@/components/club-picker';
 import { MediaBadge } from '@/components/video-icon';
 import { ParentMeetingIcon, TrainingIcon, trainingLabel } from '@/components/training-icon';
 import { JerseyBadges, JerseyIcon, JerseyPicker, type JerseyColor } from '@/components/jersey';
-import { AddressField, PitchPicker } from '@/components/pitch-picker';
+import { PitchPicker } from '@/components/pitch-picker';
+import { ParentMeetingModal } from '@/components/parent-meeting-modal';
 
 interface Team {
   id: string;
@@ -98,13 +99,12 @@ const typeLabels: Record<string, string> = {
 /**
  * Odkaz na detail udalosti; `null` = detail sa neotvára.
  * Zápas otvorí každý, kto ho vidí; detail tréningu (dochádzku) len vedenie klubu
- * a tréner daného družstva. Rodičovské združenie a celoklubové podujatia nemajú
- * detail (všetky info sú na karte).
+ * a tréner daného družstva. Rodičovské združenie má vlastný detail (úprava/odstránenie).
  */
 function eventHref(me: Me | null, e: EventItem): string | null {
   if (e.type === 'TOURNAMENT') return `/portal/turnaje/${e.id}`;
   if (e.match) return `/portal/zapasy/${e.match.id}`;
-  if (e.type === 'PARENT_MEETING') return null;
+  if (e.type === 'PARENT_MEETING') return `/portal/rodicovske/${e.id}`;
   return canManageTeam(me, e.team?.id) ? `/portal/dochadzka/${e.id}` : null;
 }
 
@@ -129,15 +129,6 @@ function audienceLabel(e: EventItem): string | null {
   if (e.type !== 'PARENT_MEETING') return null;
   if (e.audienceTeams && e.audienceTeams.length > 0) return e.audienceTeams.map((t) => compactTeam(t.name)).join(', ');
   return 'celý klub';
-}
-
-/** Môže prihlásený upraviť/zmazať rodičovské združenie (vedenie; tréner len ak sú všetky cieľové družstvá jeho). */
-function canEditMeeting(me: Me | null, e: EventItem): boolean {
-  if (e.type !== 'PARENT_MEETING' || !canManage(me)) return false;
-  if (isStaff(me)) return true;
-  const mine = new Set(coachTeams(me).map((t) => t.id));
-  const aud = e.audienceTeams ?? [];
-  return aud.length > 0 && aud.every((t) => mine.has(t.id));
 }
 
 /** Čas zrazu zápasu: explicitný meetAt, inak hodina pred začiatkom. */
@@ -199,7 +190,6 @@ export default function EventsPage() {
   const [gkTraining, setGkTraining] = useState(false);
   const [matchOpen, setMatchOpen] = useState(false);
   const [meetingOpen, setMeetingOpen] = useState(false);
-  const [editMeeting, setEditMeeting] = useState<EventItem | null>(null);
   const [nominatedMatchIds, setNominatedMatchIds] = useState<Set<string>>(new Set());
   const [venues, setVenues] = useState<string[]>([]);
   const [pitches, setPitches] = useState<Pitch[]>([]);
@@ -415,8 +405,8 @@ export default function EventsPage() {
 
       {view === 'list' ? (
         <>
-          <EventList tournamentTitles={tournamentTitles} me={me} nominated={nominatedMatchIds} onEditMeeting={setEditMeeting} title="Najbližšie" events={grouped.upcoming} empty="Žiadne naplánované udalosti." />
-          {grouped.past.length > 0 && <EventList tournamentTitles={tournamentTitles} me={me} nominated={nominatedMatchIds} onEditMeeting={setEditMeeting} title="Odohrané" events={grouped.past.slice(0, 20)} empty="" />}
+          <EventList tournamentTitles={tournamentTitles} me={me} nominated={nominatedMatchIds} title="Najbližšie" events={grouped.upcoming} empty="Žiadne naplánované udalosti." />
+          {grouped.past.length > 0 && <EventList tournamentTitles={tournamentTitles} me={me} nominated={nominatedMatchIds} title="Odohrané" events={grouped.past.slice(0, 20)} empty="" />}
         </>
       ) : (
         <MonthView
@@ -426,7 +416,7 @@ export default function EventsPage() {
           events={events}
           pitchOccupancy={pitchFilter ? occupancy.filter((o) => o.pitchId === pitchFilter) : null}
           onDayClick={canManage(me) ? setDayOpen : undefined}
-          onEditMeeting={setEditMeeting}
+         
         />
       )}
 
@@ -481,19 +471,16 @@ export default function EventsPage() {
         }}
       />
       <ParentMeetingModal
-        open={meetingOpen || !!editMeeting}
-        event={editMeeting}
+        open={meetingOpen}
         initialDate={initialDate}
         onClose={() => {
           setMeetingOpen(false);
-          setEditMeeting(null);
           setInitialDate('');
         }}
         teams={regularTeams}
         canWholeClub={isStaff(me)}
         onDone={() => {
           setMeetingOpen(false);
-          setEditMeeting(null);
           setInitialDate('');
           void load();
         }}
@@ -509,12 +496,10 @@ function EventList({
   title,
   events,
   empty,
-  onEditMeeting,
 }: {
   tournamentTitles: Map<string, string>;
   me: Me | null;
   nominated: Set<string>;
-  onEditMeeting?: (e: EventItem) => void;
   title: string;
   events: EventItem[];
   empty: string;
@@ -590,16 +575,6 @@ function EventList({
                 ) : (
                   <div className="block px-4 py-3">{body}</div>
                 )}
-                {onEditMeeting && canEditMeeting(me, e) && (
-                  <div className="flex justify-end gap-2 px-4 pb-3">
-                    <Button variant="ghost" onClick={() => onEditMeeting(e)}>
-                      Upraviť
-                    </Button>
-                    <Button variant="danger" onClick={() => onEditMeeting(e)}>
-                      Odstrániť
-                    </Button>
-                  </div>
-                )}
               </li>
             );
           })}
@@ -616,9 +591,7 @@ function MonthView({
   events,
   pitchOccupancy,
   onDayClick,
-  onEditMeeting,
 }: {
-  onEditMeeting?: (e: EventItem) => void;
   me: Me | null;
   nominated: Set<string>;
   month: Date;
@@ -769,15 +742,7 @@ function MonthView({
                           <div
                             key={e.id}
                             title={`${time}${e.endAt ? `–${formatEventTimeSk(e.endAt)}` : ''} · ${label}`}
-                            onClick={
-                              onEditMeeting && canEditMeeting(me, e)
-                                ? (ev) => {
-                                    ev.stopPropagation();
-                                    onEditMeeting(e);
-                                  }
-                                : undefined
-                            }
-                            className={`flex items-center gap-1 truncate ${onEditMeeting && canEditMeeting(me, e) ? 'cursor-pointer ' : ''} rounded-sm py-0.5 pl-1.5 pr-1 text-[11px] leading-snug hover:brightness-125 ${
+                            className={`flex items-center gap-1 truncate  rounded-sm py-0.5 pl-1.5 pr-1 text-[11px] leading-snug hover:brightness-125 ${
                               e.match ? 'font-semibold' : 'opacity-80'
                             }`}
                             style={{ backgroundColor: c.bg, color: c.text, borderLeft: `3px solid ${c.text}` }}
@@ -1326,193 +1291,6 @@ function MatchModal({
           <Button onClick={submit} disabled={busy || !teamId || (type !== 'TOURNAMENT' && !opponent) || !date || endInvalid || endMissing}>
             {busy ? 'Ukladám…' : 'Vytvoriť'}
           </Button>
-        </div>
-      </div>
-    </Modal>
-  );
-}
-
-/** Rodičovské združenie: pre vybrané družstvá alebo celý klub (vytvorenie, úprava aj odstránenie). */
-function ParentMeetingModal({
-  open,
-  onClose,
-  teams,
-  canWholeClub,
-  onDone,
-  event,
-  initialDate,
-}: {
-  open: boolean;
-  onClose: () => void;
-  teams: Team[];
-  canWholeClub: boolean;
-  onDone: () => void;
-  event?: EventItem | null;
-  initialDate?: string;
-}) {
-  const [title, setTitle] = useState('Rodičovské združenie');
-  const [wholeClub, setWholeClub] = useState(false);
-  const [teamIds, setTeamIds] = useState<string[]>([]);
-  const [date, setDate] = useState('');
-  const [time, setTime] = useState('17:00');
-  const [location, setLocation] = useState('');
-  const [address, setAddress] = useState('');
-  const [busy, setBusy] = useState(false);
-  const [confirmDelete, setConfirmDelete] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const p2 = (n: number) => String(n).padStart(2, '0');
-
-  // naplnenie formulára pri otvorení (úprava = hodnoty udalosti, nové = predvolené)
-  useEffect(() => {
-    if (!open) return;
-    setError(null);
-    setConfirmDelete(false);
-    if (event) {
-      const d = new Date(event.startAt);
-      setTitle(event.title);
-      setDate(`${d.getUTCFullYear()}-${p2(d.getUTCMonth() + 1)}-${p2(d.getUTCDate())}`);
-      setTime(`${p2(d.getUTCHours())}:${p2(d.getUTCMinutes())}`);
-      setLocation(event.location ?? '');
-      setAddress(event.address ?? '');
-      const aud = event.audienceTeams ?? [];
-      setWholeClub(aud.length === 0);
-      setTeamIds(aud.map((t) => t.id));
-    } else {
-      setTitle('Rodičovské združenie');
-      setDate(initialDate ?? '');
-      setTime('17:00');
-      setLocation('');
-      setAddress('');
-      setWholeClub(false);
-      setTeamIds([]);
-    }
-  }, [open, event, initialDate]);
-
-  // tréner nemôže robiť celoklubové združenie
-  useEffect(() => {
-    if (!canWholeClub && wholeClub) setWholeClub(false);
-  }, [canWholeClub, wholeClub]);
-
-  function toggleTeam(id: string) {
-    setTeamIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
-  }
-
-  async function submit() {
-    setBusy(true);
-    setError(null);
-    try {
-      const body = {
-        title,
-        startAt: `${date}T${time}:00.000Z`,
-        location: location || undefined,
-        address: event ? address.trim() || null : address.trim() || undefined,
-        audienceTeamIds: wholeClub ? [] : teamIds,
-      };
-      if (event) {
-        await api(`/events/${event.id}`, { method: 'PATCH', body: JSON.stringify(body) });
-      } else {
-        await api('/events', { method: 'POST', body: JSON.stringify({ type: 'PARENT_MEETING', ...body }) });
-      }
-      onDone();
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Uloženie zlyhalo');
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function remove() {
-    if (!event) return;
-    setBusy(true);
-    setError(null);
-    try {
-      await api(`/events/${event.id}?scope=one`, { method: 'DELETE' });
-      onDone();
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Odstránenie zlyhalo');
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  const valid = !!date && (wholeClub || teamIds.length > 0);
-
-  return (
-    <Modal open={open} onClose={onClose} title={event ? 'Upraviť rodičovské združenie' : 'Nové rodičovské združenie'}>
-      <div className="space-y-4">
-        <div>
-          <label className={labelCls}>Názov</label>
-          <input value={title} onChange={(e) => setTitle(e.target.value)} className={inputCls} />
-        </div>
-
-        <div>
-          <label className={labelCls}>Pre koho</label>
-          {canWholeClub && (
-            <label className="mb-2 flex items-center gap-2 text-sm text-gray-700">
-              <input type="checkbox" checked={wholeClub} onChange={(e) => setWholeClub(e.target.checked)} />
-              Celý klub (všetky družstvá)
-            </label>
-          )}
-          {!wholeClub && (
-            <div className="grid max-h-40 grid-cols-2 gap-1 overflow-y-auto rounded-md border border-gray-200 p-2">
-              {teams.map((t) => (
-                <label key={t.id} className="flex items-center gap-2 text-sm text-gray-700">
-                  <input type="checkbox" checked={teamIds.includes(t.id)} onChange={() => toggleTeam(t.id)} />
-                  {t.name}
-                </label>
-              ))}
-              {teams.length === 0 && <p className="text-sm text-gray-400">Žiadne družstvá.</p>}
-            </div>
-          )}
-          <p className="mt-1 text-xs text-gray-500">Vyberte jedno či viac družstiev, alebo celý klub.</p>
-        </div>
-
-        <div className="grid grid-cols-2 gap-3">
-          <div>
-            <label className={labelCls}>Dátum</label>
-            <input type="date" value={date} onChange={(e) => setDate(e.target.value)} className={inputCls} />
-          </div>
-          <div>
-            <label className={labelCls}>Čas</label>
-            <input type="time" value={time} onChange={(e) => setTime(e.target.value)} className={inputCls} />
-          </div>
-        </div>
-        <div>
-          <label className={labelCls}>Miesto</label>
-          <input value={location} onChange={(e) => setLocation(e.target.value)} className={inputCls} list="venue-list" placeholder="Klubovňa / ihrisko KNV" />
-        </div>
-        <AddressField value={address} onChange={setAddress} />
-
-        <ErrorText>{error}</ErrorText>
-        {confirmDelete && (
-          <div className="rounded border border-red-200 bg-red-50 p-3 text-sm text-red-800">
-            Natrvalo odstrániť toto rodičovské združenie? Túto akciu nie je možné vrátiť.
-            <div className="mt-2 flex gap-2">
-              <Button variant="ghost" onClick={() => setConfirmDelete(false)}>
-                Späť
-              </Button>
-              <Button variant="danger" onClick={remove} disabled={busy}>
-                {busy ? 'Odstraňujem…' : 'Odstrániť natrvalo'}
-              </Button>
-            </div>
-          </div>
-        )}
-        <div className="flex justify-between gap-2">
-          <div>
-            {event && (
-              <Button variant="danger" onClick={() => setConfirmDelete(true)} disabled={busy}>
-                Odstrániť
-              </Button>
-            )}
-          </div>
-          <div className="flex gap-2">
-            <Button variant="ghost" onClick={onClose}>
-              Zrušiť
-            </Button>
-            <Button onClick={submit} disabled={busy || !valid}>
-              {busy ? 'Ukladám…' : event ? 'Uložiť' : 'Vytvoriť'}
-            </Button>
-          </div>
         </div>
       </div>
     </Modal>

@@ -129,4 +129,10 @@ export class EventsController {
   ) {
     return this.eventsService.markAttendance(eventId, body, user);
   }
+
+  /** Detail rodičovského združenia (zobrazenie + podklad pre úpravu). */
+  @Get(':id')
+  meeting(@Param('id') eventId: string) {
+    return this.eventsService.getMeeting(eventId);
+  }
 }

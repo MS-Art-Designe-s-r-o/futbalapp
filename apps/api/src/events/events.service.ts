@@ -404,6 +404,12 @@ export class EventsService {
     }
   }
 
+  async getMeeting(eventId: string) {
+    const e = await this.prisma.event.findUnique({ where: { id: eventId }, include: EVENT_INCLUDE });
+    if (!e || e.type !== 'PARENT_MEETING') throw new NotFoundException('Udalosť neexistuje');
+    return e;
+  }
+
   async assertGkTeamsOnlyTraining(user: AuthUser, type: string, teamIds: Array<string | undefined | null>) {
     if (isStaff(user) || type === 'TRAINING') return;
     const ids = [...new Set(teamIds.filter((x): x is string => !!x))];
