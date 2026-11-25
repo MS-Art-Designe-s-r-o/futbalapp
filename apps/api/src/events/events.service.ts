@@ -340,6 +340,43 @@ export class EventsService {
     return this.canManage(user, null);
   }
 
+  /**
+   * Zabráni duplicitnej udalosti pre tú istú skupinu:
+   *  - rodičovské združenie: v ten istý deň nesmú byť dve pre rovnaké družstvo (celoklubové koliduje s každým);
+   *  - tréning/zápas: rovnaké družstvo, rovnaký typ a presne rovnaký začiatok.
+   */
+  private async assertNoDuplicate(
+    e: { type: string; teamId?: string | null; audienceTeamIds: string[]; startAt: Date },
+    excludeId?: string,
+  ) {
+    if (e.type === 'PARENT_MEETING') {
+      const dayStart = new Date(Date.UTC(e.startAt.getUTCFullYear(), e.startAt.getUTCMonth(), e.startAt.getUTCDate()));
+      const dayEnd = new Date(dayStart.getTime() + 24 * 3600 * 1000);
+      const same = await this.prisma.event.findMany({
+        where: { type: 'PARENT_MEETING', startAt: { gte: dayStart, lt: dayEnd }, ...(excludeId ? { id: { not: excludeId } } : {}) },
+        select: { teamId: true, title: true, audienceTeams: { select: { id: true, name: true } } },
+      });
+      const mine = new Set([...e.audienceTeamIds, ...(e.teamId ? [e.teamId] : [])]);
+      const clubWide = mine.size === 0;
+      for (const o of same) {
+        const theirs = new Set([...o.audienceTeams.map((t) => t.id), ...(o.teamId ? [o.teamId] : [])]);
+        const shared = o.audienceTeams.filter((t) => mine.has(t.id)).map((t) => t.name);
+        if (clubWide || theirs.size === 0 || shared.length > 0 || (o.teamId && mine.has(o.teamId))) {
+          const who = shared.length ? ` pre ${shared.join(', ')}` : '';
+          throw new BadRequestException(`V tento deň už rodičovské združenie existuje${who} („${o.title}“). Upravte ho alebo vyberte iný deň.`);
+        }
+      }
+      return;
+    }
+    if ((e.type === 'TRAINING' || e.type === 'MATCH') && e.teamId) {
+      const dup = await this.prisma.event.findFirst({
+        where: { type: e.type as 'TRAINING' | 'MATCH', teamId: e.teamId, startAt: e.startAt, parentEventId: null, ...(excludeId ? { id: { not: excludeId } } : {}) },
+        select: { title: true },
+      });
+      if (dup) throw new BadRequestException(`Rovnaká udalosť už existuje v tomto čase („${dup.title}“).`);
+    }
+  }
+
   async assertGkTeamsOnlyTraining(user: AuthUser, type: string, teamIds: Array<string | undefined | null>) {
     if (isStaff(user) || type === 'TRAINING') return;
     const ids = [...new Set(teamIds.filter((x): x is string => !!x))];
@@ -382,6 +419,7 @@ export class EventsService {
     const legacyTournament = input.type === 'TOURNAMENT' && !!input.opponent?.trim() && !input.participants?.length;
     const isMatch = input.type === 'MATCH' || legacyTournament;
     if (input.type === 'TOURNAMENT' && !legacyTournament && !team) throw new BadRequestException('Vyberte družstvo turnaja');
+    await this.assertNoDuplicate({ type: input.type, teamId: team?.id, audienceTeamIds: [...new Set(input.audienceTeamIds ?? [])], startAt: input.startAt });
     const pitch = await this.resolvePitch(input.pitchId);
     this.assertEndAfterStart(input.startAt, input.endAt, !!pitch);
     const slots = [{ startAt: input.startAt, endAt: input.endAt }];
@@ -557,6 +595,14 @@ export class EventsService {
     const pitch = await this.resolvePitch(input.pitchId);
     const effectivePitchId = pitch ? pitch.id : input.pitchId === undefined ? event.pitchId : null;
     const newStart = input.startAt ?? event.startAt;
+    if (input.startAt || input.audienceTeamIds) {
+      const audienceIds =
+        input.audienceTeamIds ??
+        (event.type === 'PARENT_MEETING'
+          ? (await this.prisma.team.findMany({ where: { audienceEvents: { some: { id: eventId } } }, select: { id: true } })).map((t) => t.id)
+          : []);
+      await this.assertNoDuplicate({ type: event.type, teamId: newTeamId ?? event.teamId, audienceTeamIds: audienceIds, startAt: newStart }, eventId);
+    }
     const newEnd = input.endAt ?? event.endAt;
     // starý klient mení len začiatok → koniec sa nesmie ocitnúť pred novým začiatkom
     if (input.startAt && !input.endAt && newEnd && newEnd.getTime() <= newStart.getTime()) {
