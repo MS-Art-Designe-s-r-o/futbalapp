@@ -327,6 +327,19 @@ export class EventsService {
     return !!team?.isGoalkeeperGroup;
   }
 
+  /** Úprava/zmazanie udalosti: družstvová → tréner družstva; rodičovské združenie → tréner všetkých cieľových družstiev; celoklubové → vedenie. */
+  async canManageEvent(user: AuthUser, event: { id: string; teamId: string | null; type: string }): Promise<boolean> {
+    if (event.teamId) return this.canManage(user, event.teamId);
+    if (event.type === 'PARENT_MEETING') {
+      const audience = await this.prisma.team.findMany({ where: { audienceEvents: { some: { id: event.id } } }, select: { id: true } });
+      if (audience.length > 0) {
+        for (const t of audience) if (!(await this.canManage(user, t.id))) return false;
+        return true;
+      }
+    }
+    return this.canManage(user, null);
+  }
+
   async assertGkTeamsOnlyTraining(user: AuthUser, type: string, teamIds: Array<string | undefined | null>) {
     if (isStaff(user) || type === 'TRAINING') return;
     const ids = [...new Set(teamIds.filter((x): x is string => !!x))];
@@ -513,7 +526,12 @@ export class EventsService {
   async update(eventId: string, input: Partial<CreateEventInput>, user: AuthUser) {
     const event = await this.prisma.event.findUnique({ where: { id: eventId } });
     if (!event) throw new NotFoundException('Udalosť neexistuje');
-    if (!(await this.canManage(user, event.teamId))) throw new ForbiddenException('Túto udalosť nemôžete upravovať');
+    if (!(await this.canManageEvent(user, event))) throw new ForbiddenException('Túto udalosť nemôžete upravovať');
+    if (input.audienceTeamIds && event.type === 'PARENT_MEETING') {
+      const ids = [...new Set(input.audienceTeamIds)];
+      if (ids.length === 0 && !isStaff(user)) throw new ForbiddenException('Celoklubovú udalosť môže upraviť len vedenie klubu');
+      for (const id of ids) if (!(await this.canManage(user, id))) throw new ForbiddenException('Nemôžete nastaviť iné družstvo');
+    }
     // zmena typu tréningu: futbalový ↔ brankársky = prepnutie družstva udalosti
     // (bežné družstvo ↔ skupina „… Brankári“ rovnakej kategórie alebo „Brankári (všetci)“)
     let newTeamId: string | undefined;
@@ -571,6 +589,11 @@ export class EventsService {
         pitchId: pitch ? pitch.id : undefined,
         // verejnosť len pre tréning; pri iných typoch ignoruj
         isPublic: event.type === 'TRAINING' ? input.isPublic : undefined,
+        // rodičovské združenie: zmena cieľových družstiev (prázdne = celý klub)
+        audienceTeams:
+          event.type === 'PARENT_MEETING' && input.audienceTeamIds
+            ? { set: [...new Set(input.audienceTeamIds)].map((id) => ({ id })) }
+            : undefined,
       },
     });
     if (newTeamId) {
@@ -673,7 +696,7 @@ export class EventsService {
   async remove(eventId: string, scope: 'one' | 'future', user: AuthUser) {
     const event = await this.prisma.event.findUnique({ where: { id: eventId } });
     if (!event) throw new NotFoundException('Udalosť neexistuje');
-    if (!(await this.canManage(user, event.teamId))) throw new ForbiddenException('Túto udalosť nemôžete odstrániť');
+    if (!(await this.canManageEvent(user, event))) throw new ForbiddenException('Túto udalosť nemôžete odstrániť');
     if (scope === 'future' && event.recurrenceGroupId) {
       const res = await this.prisma.event.deleteMany({
         where: { recurrenceGroupId: event.recurrenceGroupId, startAt: { gte: event.startAt } },

@@ -131,6 +131,15 @@ function audienceLabel(e: EventItem): string | null {
   return 'celý klub';
 }
 
+/** Môže prihlásený upraviť/zmazať rodičovské združenie (vedenie; tréner len ak sú všetky cieľové družstvá jeho). */
+function canEditMeeting(me: Me | null, e: EventItem): boolean {
+  if (e.type !== 'PARENT_MEETING' || !canManage(me)) return false;
+  if (isStaff(me)) return true;
+  const mine = new Set(coachTeams(me).map((t) => t.id));
+  const aud = e.audienceTeams ?? [];
+  return aud.length > 0 && aud.every((t) => mine.has(t.id));
+}
+
 /** Čas zrazu zápasu: explicitný meetAt, inak hodina pred začiatkom. */
 function matchMeetTime(e: EventItem): Date | null {
   if (!e.match) return null;
@@ -190,6 +199,7 @@ export default function EventsPage() {
   const [gkTraining, setGkTraining] = useState(false);
   const [matchOpen, setMatchOpen] = useState(false);
   const [meetingOpen, setMeetingOpen] = useState(false);
+  const [editMeeting, setEditMeeting] = useState<EventItem | null>(null);
   const [nominatedMatchIds, setNominatedMatchIds] = useState<Set<string>>(new Set());
   const [venues, setVenues] = useState<string[]>([]);
   const [pitches, setPitches] = useState<Pitch[]>([]);
@@ -405,8 +415,8 @@ export default function EventsPage() {
 
       {view === 'list' ? (
         <>
-          <EventList tournamentTitles={tournamentTitles} me={me} nominated={nominatedMatchIds} title="Najbližšie" events={grouped.upcoming} empty="Žiadne naplánované udalosti." />
-          {grouped.past.length > 0 && <EventList tournamentTitles={tournamentTitles} me={me} nominated={nominatedMatchIds} title="Odohrané" events={grouped.past.slice(0, 20)} empty="" />}
+          <EventList tournamentTitles={tournamentTitles} me={me} nominated={nominatedMatchIds} onEditMeeting={setEditMeeting} title="Najbližšie" events={grouped.upcoming} empty="Žiadne naplánované udalosti." />
+          {grouped.past.length > 0 && <EventList tournamentTitles={tournamentTitles} me={me} nominated={nominatedMatchIds} onEditMeeting={setEditMeeting} title="Odohrané" events={grouped.past.slice(0, 20)} empty="" />}
         </>
       ) : (
         <MonthView
@@ -416,6 +426,7 @@ export default function EventsPage() {
           events={events}
           pitchOccupancy={pitchFilter ? occupancy.filter((o) => o.pitchId === pitchFilter) : null}
           onDayClick={canManage(me) ? setDayOpen : undefined}
+          onEditMeeting={setEditMeeting}
         />
       )}
 
@@ -429,6 +440,10 @@ export default function EventsPage() {
         onPick={(kind) => {
           setInitialDate(dayOpen ?? '');
           setDayOpen(null);
+          if (kind === 'meeting') {
+            setMeetingOpen(true);
+            return;
+          }
           if (kind === 'training' || kind === 'gk') {
             setGkTraining(kind === 'gk');
             setTrainingOpen(true);
@@ -466,12 +481,20 @@ export default function EventsPage() {
         }}
       />
       <ParentMeetingModal
-        open={meetingOpen}
-        onClose={() => setMeetingOpen(false)}
+        open={meetingOpen || !!editMeeting}
+        event={editMeeting}
+        initialDate={initialDate}
+        onClose={() => {
+          setMeetingOpen(false);
+          setEditMeeting(null);
+          setInitialDate('');
+        }}
         teams={regularTeams}
         canWholeClub={isStaff(me)}
         onDone={() => {
           setMeetingOpen(false);
+          setEditMeeting(null);
+          setInitialDate('');
           void load();
         }}
       />
@@ -486,10 +509,12 @@ function EventList({
   title,
   events,
   empty,
+  onEditMeeting,
 }: {
   tournamentTitles: Map<string, string>;
   me: Me | null;
   nominated: Set<string>;
+  onEditMeeting?: (e: EventItem) => void;
   title: string;
   events: EventItem[];
   empty: string;
@@ -565,6 +590,16 @@ function EventList({
                 ) : (
                   <div className="block px-4 py-3">{body}</div>
                 )}
+                {onEditMeeting && canEditMeeting(me, e) && (
+                  <div className="flex justify-end gap-2 px-4 pb-3">
+                    <Button variant="ghost" onClick={() => onEditMeeting(e)}>
+                      Upraviť
+                    </Button>
+                    <Button variant="danger" onClick={() => onEditMeeting(e)}>
+                      Odstrániť
+                    </Button>
+                  </div>
+                )}
               </li>
             );
           })}
@@ -581,7 +616,9 @@ function MonthView({
   events,
   pitchOccupancy,
   onDayClick,
+  onEditMeeting,
 }: {
+  onEditMeeting?: (e: EventItem) => void;
   me: Me | null;
   nominated: Set<string>;
   month: Date;
@@ -732,7 +769,15 @@ function MonthView({
                           <div
                             key={e.id}
                             title={`${time}${e.endAt ? `–${formatEventTimeSk(e.endAt)}` : ''} · ${label}`}
-                            className={`flex items-center gap-1 truncate rounded-sm py-0.5 pl-1.5 pr-1 text-[11px] leading-snug hover:brightness-125 ${
+                            onClick={
+                              onEditMeeting && canEditMeeting(me, e)
+                                ? (ev) => {
+                                    ev.stopPropagation();
+                                    onEditMeeting(e);
+                                  }
+                                : undefined
+                            }
+                            className={`flex items-center gap-1 truncate ${onEditMeeting && canEditMeeting(me, e) ? 'cursor-pointer ' : ''} rounded-sm py-0.5 pl-1.5 pr-1 text-[11px] leading-snug hover:brightness-125 ${
                               e.match ? 'font-semibold' : 'opacity-80'
                             }`}
                             style={{ backgroundColor: c.bg, color: c.text, borderLeft: `3px solid ${c.text}` }}
@@ -767,7 +812,7 @@ function DayModal({
   pitches: Pitch[];
   occupancy: Occupancy[];
   onClose: () => void;
-  onPick: (kind: 'training' | 'gk' | 'match') => void;
+  onPick: (kind: 'training' | 'gk' | 'match' | 'meeting') => void;
   showRegular: boolean;
   showGk: boolean;
 }) {
@@ -815,6 +860,11 @@ function DayModal({
           {showGk && (
             <Button variant="ghost" onClick={() => onPick('gk')}>
               + Tréning brankárov
+            </Button>
+          )}
+          {showRegular && (
+            <Button variant="ghost" onClick={() => onPick('meeting')}>
+              + Rodičovské
             </Button>
           )}
           {showRegular && <Button onClick={() => onPick('match')}>+ Zápas</Button>}
@@ -1282,19 +1332,23 @@ function MatchModal({
   );
 }
 
-/** Rodičovské združenie: pre vybrané družstvá alebo celý klub. */
+/** Rodičovské združenie: pre vybrané družstvá alebo celý klub (vytvorenie, úprava aj odstránenie). */
 function ParentMeetingModal({
   open,
   onClose,
   teams,
   canWholeClub,
   onDone,
+  event,
+  initialDate,
 }: {
   open: boolean;
   onClose: () => void;
   teams: Team[];
   canWholeClub: boolean;
   onDone: () => void;
+  event?: EventItem | null;
+  initialDate?: string;
 }) {
   const [title, setTitle] = useState('Rodičovské združenie');
   const [wholeClub, setWholeClub] = useState(false);
@@ -1304,7 +1358,35 @@ function ParentMeetingModal({
   const [location, setLocation] = useState('');
   const [address, setAddress] = useState('');
   const [busy, setBusy] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const p2 = (n: number) => String(n).padStart(2, '0');
+
+  // naplnenie formulára pri otvorení (úprava = hodnoty udalosti, nové = predvolené)
+  useEffect(() => {
+    if (!open) return;
+    setError(null);
+    setConfirmDelete(false);
+    if (event) {
+      const d = new Date(event.startAt);
+      setTitle(event.title);
+      setDate(`${d.getUTCFullYear()}-${p2(d.getUTCMonth() + 1)}-${p2(d.getUTCDate())}`);
+      setTime(`${p2(d.getUTCHours())}:${p2(d.getUTCMinutes())}`);
+      setLocation(event.location ?? '');
+      setAddress(event.address ?? '');
+      const aud = event.audienceTeams ?? [];
+      setWholeClub(aud.length === 0);
+      setTeamIds(aud.map((t) => t.id));
+    } else {
+      setTitle('Rodičovské združenie');
+      setDate(initialDate ?? '');
+      setTime('17:00');
+      setLocation('');
+      setAddress('');
+      setWholeClub(false);
+      setTeamIds([]);
+    }
+  }, [open, event, initialDate]);
 
   // tréner nemôže robiť celoklubové združenie
   useEffect(() => {
@@ -1319,17 +1401,18 @@ function ParentMeetingModal({
     setBusy(true);
     setError(null);
     try {
-      await api('/events', {
-        method: 'POST',
-        body: JSON.stringify({
-          type: 'PARENT_MEETING',
-          title,
-          startAt: `${date}T${time}:00.000Z`,
-          location: location || undefined,
-          address: address.trim() || undefined,
-          audienceTeamIds: wholeClub ? [] : teamIds,
-        }),
-      });
+      const body = {
+        title,
+        startAt: `${date}T${time}:00.000Z`,
+        location: location || undefined,
+        address: event ? address.trim() || null : address.trim() || undefined,
+        audienceTeamIds: wholeClub ? [] : teamIds,
+      };
+      if (event) {
+        await api(`/events/${event.id}`, { method: 'PATCH', body: JSON.stringify(body) });
+      } else {
+        await api('/events', { method: 'POST', body: JSON.stringify({ type: 'PARENT_MEETING', ...body }) });
+      }
       onDone();
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Uloženie zlyhalo');
@@ -1338,10 +1421,24 @@ function ParentMeetingModal({
     }
   }
 
+  async function remove() {
+    if (!event) return;
+    setBusy(true);
+    setError(null);
+    try {
+      await api(`/events/${event.id}?scope=one`, { method: 'DELETE' });
+      onDone();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Odstránenie zlyhalo');
+    } finally {
+      setBusy(false);
+    }
+  }
+
   const valid = !!date && (wholeClub || teamIds.length > 0);
 
   return (
-    <Modal open={open} onClose={onClose} title="Nové rodičovské združenie">
+    <Modal open={open} onClose={onClose} title={event ? 'Upraviť rodičovské združenie' : 'Nové rodičovské združenie'}>
       <div className="space-y-4">
         <div>
           <label className={labelCls}>Názov</label>
@@ -1387,13 +1484,35 @@ function ParentMeetingModal({
         <AddressField value={address} onChange={setAddress} />
 
         <ErrorText>{error}</ErrorText>
-        <div className="flex justify-end gap-2">
-          <Button variant="ghost" onClick={onClose}>
-            Zrušiť
-          </Button>
-          <Button onClick={submit} disabled={busy || !valid}>
-            {busy ? 'Ukladám…' : 'Vytvoriť'}
-          </Button>
+        {confirmDelete && (
+          <div className="rounded border border-red-200 bg-red-50 p-3 text-sm text-red-800">
+            Natrvalo odstrániť toto rodičovské združenie? Túto akciu nie je možné vrátiť.
+            <div className="mt-2 flex gap-2">
+              <Button variant="ghost" onClick={() => setConfirmDelete(false)}>
+                Späť
+              </Button>
+              <Button variant="danger" onClick={remove} disabled={busy}>
+                {busy ? 'Odstraňujem…' : 'Odstrániť natrvalo'}
+              </Button>
+            </div>
+          </div>
+        )}
+        <div className="flex justify-between gap-2">
+          <div>
+            {event && (
+              <Button variant="danger" onClick={() => setConfirmDelete(true)} disabled={busy}>
+                Odstrániť
+              </Button>
+            )}
+          </div>
+          <div className="flex gap-2">
+            <Button variant="ghost" onClick={onClose}>
+              Zrušiť
+            </Button>
+            <Button onClick={submit} disabled={busy || !valid}>
+              {busy ? 'Ukladám…' : event ? 'Uložiť' : 'Vytvoriť'}
+            </Button>
+          </div>
         </div>
       </div>
     </Modal>
