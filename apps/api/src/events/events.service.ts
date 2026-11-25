@@ -345,6 +345,22 @@ export class EventsService {
    *  - rodičovské združenie: v ten istý deň nesmú byť dve pre rovnaké družstvo (celoklubové koliduje s každým);
    *  - tréning/zápas: rovnaké družstvo, rovnaký typ a presne rovnaký začiatok.
    */
+  /** Popis existujúcej udalosti pre hlášku: kde (termín, miesto, družstvo) a kto ju vytvoril. */
+  private async describeExisting(o: {
+    title: string;
+    startAt: Date;
+    location: string | null;
+    createdById: string | null;
+    team?: { name: string } | null;
+    audienceTeams?: Array<{ name: string }>;
+  }): Promise<string> {
+    const u = o.createdById
+      ? await this.prisma.user.findUnique({ where: { id: o.createdById }, select: { firstName: true, lastName: true } })
+      : null;
+    const groups = o.audienceTeams?.length ? o.audienceTeams.map((t) => t.name).join(', ') : o.team?.name ?? 'celý klub';
+    return `„${o.title}“ — kalendár: ${formatEventDateTimeSk(o.startAt)}, ${o.location ? `miesto: ${o.location}, ` : ''}pre: ${groups}; vytvoril/a: ${u ? `${u.firstName} ${u.lastName}` : 'neznámy používateľ (alebo import)'}`;
+  }
+
   private async assertNoDuplicate(
     e: { type: string; teamId?: string | null; audienceTeamIds: string[]; startAt: Date },
     excludeId?: string,
@@ -354,7 +370,15 @@ export class EventsService {
       const dayEnd = new Date(dayStart.getTime() + 24 * 3600 * 1000);
       const same = await this.prisma.event.findMany({
         where: { type: 'PARENT_MEETING', startAt: { gte: dayStart, lt: dayEnd }, ...(excludeId ? { id: { not: excludeId } } : {}) },
-        select: { teamId: true, title: true, audienceTeams: { select: { id: true, name: true } } },
+        select: {
+          teamId: true,
+          title: true,
+          startAt: true,
+          location: true,
+          createdById: true,
+          team: { select: { name: true } },
+          audienceTeams: { select: { id: true, name: true } },
+        },
       });
       const mine = new Set([...e.audienceTeamIds, ...(e.teamId ? [e.teamId] : [])]);
       const clubWide = mine.size === 0;
@@ -362,8 +386,9 @@ export class EventsService {
         const theirs = new Set([...o.audienceTeams.map((t) => t.id), ...(o.teamId ? [o.teamId] : [])]);
         const shared = o.audienceTeams.filter((t) => mine.has(t.id)).map((t) => t.name);
         if (clubWide || theirs.size === 0 || shared.length > 0 || (o.teamId && mine.has(o.teamId))) {
-          const who = shared.length ? ` pre ${shared.join(', ')}` : '';
-          throw new BadRequestException(`V tento deň už rodičovské združenie existuje${who} („${o.title}“). Upravte ho alebo vyberte iný deň.`);
+          throw new BadRequestException(
+            `Takéto rodičovské združenie už existuje a nedá sa vytvoriť znova: ${await this.describeExisting(o)}. Upravte existujúce alebo vyberte iný deň.`,
+          );
         }
       }
       return;
@@ -371,9 +396,11 @@ export class EventsService {
     if ((e.type === 'TRAINING' || e.type === 'MATCH') && e.teamId) {
       const dup = await this.prisma.event.findFirst({
         where: { type: e.type as 'TRAINING' | 'MATCH', teamId: e.teamId, startAt: e.startAt, parentEventId: null, ...(excludeId ? { id: { not: excludeId } } : {}) },
-        select: { title: true },
+        select: { title: true, startAt: true, location: true, createdById: true, team: { select: { name: true } } },
       });
-      if (dup) throw new BadRequestException(`Rovnaká udalosť už existuje v tomto čase („${dup.title}“).`);
+      if (dup) {
+        throw new BadRequestException(`Takáto udalosť už existuje a nedá sa vytvoriť znova: ${await this.describeExisting(dup)}.`);
+      }
     }
   }
 
