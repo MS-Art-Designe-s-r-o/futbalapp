@@ -634,9 +634,11 @@ export class EventsService {
     before: { startAt: Date; endAt: Date | null; type: string; teamId: string | null },
     after: { id: string; startAt: Date; endAt: Date | null; type: string; teamId: string | null; title: string; location: string | null },
   ) {
-    if (!after.teamId || after.startAt.getTime() < Date.now()) return;
+    if (after.startAt.getTime() < Date.now()) return;
+    const isMeeting = after.type === 'PARENT_MEETING';
+    if (!after.teamId && !isMeeting) return;
     const isMatch = after.type === 'MATCH' || after.type === 'TOURNAMENT';
-    if (!isMatch && after.type !== 'TRAINING') return;
+    if (!isMatch && !isMeeting && after.type !== 'TRAINING') return;
 
     const memberSelect = {
       user: { select: { email: true } },
@@ -644,7 +646,19 @@ export class EventsService {
     } as const;
     let members: Array<{ user: { email: string | null } | null; guardians: Array<{ user: { email: string | null } }> }>;
     let heading: string;
-    if (isMatch) {
+    let coachTeamIds: string[] = after.teamId ? [after.teamId] : [];
+    if (isMeeting) {
+      // rodičovské združenie: hráči družstiev z cieľa (prázdny cieľ = celý klub), ich rodičia a tréneri
+      const aud = await this.prisma.team.findMany({ where: { audienceEvents: { some: { id: after.id } } }, select: { id: true } });
+      const ids = aud.map((t) => t.id);
+      if (after.teamId && !ids.includes(after.teamId)) ids.push(after.teamId);
+      coachTeamIds = ids;
+      members = await this.prisma.member.findMany({
+        where: { memberships: { some: { ...(ids.length ? { teamId: { in: ids } } : {}), season: { isActive: true }, leftAt: null } } },
+        select: memberSelect,
+      });
+      heading = 'Zmena termínu rodičovského združenia';
+    } else if (isMatch) {
       const match = await this.prisma.match.findUnique({
         where: { eventId: after.id },
         select: {
@@ -655,13 +669,13 @@ export class EventsService {
       heading = 'Zmena termínu zápasu';
     } else {
       members = await this.prisma.member.findMany({
-        where: { memberships: { some: { teamId: after.teamId, season: { isActive: true }, leftAt: null } } },
+        where: { memberships: { some: { teamId: after.teamId!, season: { isActive: true }, leftAt: null } } },
         select: memberSelect,
       });
       heading = 'Zmena termínu tréningu';
     }
     const coaches = await this.prisma.userRole.findMany({
-      where: { role: 'COACH', teamId: after.teamId },
+      where: { role: 'COACH', ...(isMeeting && coachTeamIds.length === 0 ? {} : { teamId: { in: coachTeamIds } }) },
       select: { user: { select: { email: true } } },
     });
 
