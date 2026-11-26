@@ -49,6 +49,7 @@ export default function PortalLayout({ children }: { children: React.ReactNode }
   const pathname = usePathname();
   const { me } = useMe();
   const [pendingRegs, setPendingRegs] = useState(0);
+  const [unreadChat, setUnreadChat] = useState({ channels: 0, messages: 0 });
   const [openGroup, setOpenGroup] = useState<string | null>(null);
 
   useEffect(() => {
@@ -63,6 +64,25 @@ export default function PortalLayout({ children }: { children: React.ReactNode }
       .then((r) => setPendingRegs(r.length))
       .catch(() => {});
   }, [staff, pathname]);
+
+  // neprečítaná komunikácia — ikonka pri „Komunikácia“ ešte pred otvorením (obnova pri zmene stránky,
+  // každú minútu a hneď po prečítaní kanála)
+  useEffect(() => {
+    if (!me) return;
+    let alive = true;
+    const load = () =>
+      api<{ channels: number; messages: number }>('/chat/unread')
+        .then((u) => alive && setUnreadChat(u))
+        .catch(() => {});
+    void load();
+    const timer = setInterval(load, 60_000);
+    window.addEventListener('fkknv:chat-read', load);
+    return () => {
+      alive = false;
+      clearInterval(timer);
+      window.removeEventListener('fkknv:chat-read', load);
+    };
+  }, [me, pathname]);
 
   // zavri rozbalené menu pri prechode na inú stránku
   useEffect(() => {
@@ -98,8 +118,30 @@ export default function PortalLayout({ children }: { children: React.ReactNode }
                 if (entry.kind === 'leaf') {
                   if (!entry.show(ctx)) return null;
                   return (
-                    <Link key={entry.href} href={entry.href} className={flatCls(isActive(entry.href))}>
-                      {entry.label}
+                    <Link
+                      key={entry.href}
+                      href={entry.href}
+                      className={`${flatCls(isActive(entry.href))} ${entry.href === '/portal/chat' && unreadChat.messages > 0 ? 'inline-flex items-center' : ''}`}
+                    >
+                      {entry.href === '/portal/chat' && unreadChat.messages > 0 ? (
+                        <span
+                          className="inline-flex items-center gap-1.5"
+                          title={`Neprečítané správy: ${unreadChat.messages} v ${unreadChat.channels} kanáloch`}
+                        >
+                          <span className="relative inline-flex">
+                            <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor" aria-hidden>
+                              <path d="M4 3h16a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H9l-5 4v-4H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2z" />
+                            </svg>
+                            <span className="absolute -right-1.5 -top-1.5 h-2.5 w-2.5 animate-pulse rounded-full bg-red-500 ring-2 ring-club-900" />
+                          </span>
+                          {entry.label}
+                          <span className="rounded-full bg-red-500 px-1.5 text-[11px] font-bold leading-4 text-white">
+                            {unreadChat.messages > 99 ? '99+' : unreadChat.messages}
+                          </span>
+                        </span>
+                      ) : (
+                        entry.label
+                      )}
                     </Link>
                   );
                 }

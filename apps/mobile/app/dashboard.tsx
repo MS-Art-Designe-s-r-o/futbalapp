@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState, type ReactNode } from 'react';
 import { Alert, FlatList, Image, Linking, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useFocusEffect, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { eventTypeColor, formatEventDateSk, formatEventDateTimeSk, formatEventTimeSk } from '@fkknv/shared';
 import { api, setToken } from '@/api';
@@ -85,6 +85,24 @@ export default function DashboardScreen() {
     const d = new Date();
     return new Date(d.getFullYear(), d.getMonth(), 1);
   });
+
+  // neprečítaná komunikácia — červená značka pri „Kanály“ ešte pred otvorením (obnova pri návrate a každú minútu)
+  const [unreadChat, setUnreadChat] = useState(0);
+  useFocusEffect(
+    useCallback(() => {
+      let alive = true;
+      const refresh = () =>
+        api<{ channels: number; messages: number }>('/chat/unread')
+          .then((u) => alive && setUnreadChat(u.messages))
+          .catch(() => {});
+      void refresh();
+      const timer = setInterval(refresh, 60_000);
+      return () => {
+        alive = false;
+        clearInterval(timer);
+      };
+    }, []),
+  );
 
   const load = useCallback(async () => {
     await flush(); // dopošli offline zápisy z ihriska
@@ -235,6 +253,11 @@ export default function DashboardScreen() {
       <View style={styles.topRow}>
         <Pressable style={[styles.topBtn, styles.topBtnDark]} onPress={() => router.push('/chat')}>
           <Text style={styles.topBtnText}>💬 Kanály</Text>
+          {unreadChat > 0 && (
+            <View style={styles.chatBadge} accessibilityLabel={`Neprečítané správy: ${unreadChat}`}>
+              <Text style={styles.chatBadgeText}>{unreadChat > 99 ? '99+' : unreadChat}</Text>
+            </View>
+          )}
         </Pressable>
         <Pressable style={[styles.topBtn, styles.topBtnDark]} onPress={() => router.push('/statistics')}>
           <Text style={styles.topBtnText}>📊 Štatistiky</Text>
@@ -557,6 +580,21 @@ const styles = StyleSheet.create({
     padding: 14,
     marginBottom: 10,
   },
+  chatBadge: {
+    position: 'absolute',
+    top: -6,
+    right: -6,
+    minWidth: 20,
+    height: 20,
+    borderRadius: 10,
+    paddingHorizontal: 5,
+    backgroundColor: ui.red,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 2,
+    borderColor: ui.bg,
+  },
+  chatBadgeText: { color: '#fff', fontSize: 11, fontWeight: '800' },
   badge: { color: ui.lime, fontSize: 12, fontWeight: '600', marginBottom: 4 },
   badgeRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8 },
   nomBadge: {

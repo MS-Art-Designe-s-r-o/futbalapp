@@ -157,6 +157,8 @@ export default function ChatPage() {
       if (activeIdRef.current !== activeId) return;
       setMessages(list);
       setError(null);
+      // server kanál označil ako prečítaný → obnov ikonku neprečítaných v menu
+      window.dispatchEvent(new Event('fkknv:chat-read'));
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Načítanie zlyhalo');
     }

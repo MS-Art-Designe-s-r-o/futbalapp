@@ -32,6 +32,12 @@ export class ChatController {
     return this.chatService.myChannels(user);
   }
 
+  /** Počet neprečítaných správ/kanálov — pre ikonku pri Komunikácia. */
+  @Get('unread')
+  unread(@CurrentUser() user: AuthUser) {
+    return this.chatService.unreadSummary(user);
+  }
+
   @Get('channels/:id/messages')
   messages(@Param('id') channelId: string, @CurrentUser() user: AuthUser, @Query('before') before?: string) {
     return this.chatService.messages(channelId, user, before);

@@ -57,8 +57,8 @@ export class ChatService {
     return [...new Set(memberships.map((m) => m.teamId))];
   }
 
-  /** Kanály, do ktorých má používateľ prístup, zoskupené podľa družstva. */
-  async myChannels(user: AuthUser) {
+  /** Podmienka: ktoré kanály smie používateľ vidieť (spoločné pre zoznam kanálov aj počítadlo neprečítaných). */
+  private async visibleChannelWhere(user: AuthUser) {
     const staff = isStaff(user);
     const coach = user.roles.some((r) => r.role === 'COACH');
     // hráč/rodič: len kanály svojich družstiev (a detí); tréner: všetky
@@ -66,22 +66,53 @@ export class ChatService {
     const demo = isDemoScope(user); // demo konto: len demo kanály; ostatní: bez demo
     const coachTeamIds = user.roles.filter((r) => r.role === 'COACH' && r.teamId).map((r) => r.teamId!);
     const coachAll = user.roles.some((r) => r.role === 'COACH' && !r.teamId);
+    return staff
+      ? { isDemo: demo }
+      : {
+          isDemo: demo,
+          // „Hromadný email" vidí len tréner družstva a vedenie (nie hráči/rodičia)
+          AND: coachAll ? [] : [{ NOT: { kind: 'TEAM_EMAIL' as const, teamId: { notIn: coachTeamIds } } }],
+          OR: [
+            { kind: 'CLUB_ANNOUNCEMENT' as const }, // celoklubové oznamy číta každý prihlásený
+            { members: { some: { userId: user.id } } },
+            // tréner vidí komunikáciu v každom družstve + interný kanál trénerov/vedenia
+            ...(coach
+              ? [{ teamId: { not: null } }, { kind: 'COACHES' as const }]
+              : [{ teamId: { in: relevant } }]), // hráč/rodič: kanály svojich/detských družstiev
+          ],
+        };
+  }
+
+  /**
+   * Súhrn neprečítaných správ pre ikonku pri „Komunikácia“ v menu/aplikácii: počet kanálov a správ
+   * (správy od iných odosielateľov novšie než posledné prečítanie). Jeden dotaz na správy, nie N.
+   */
+  async unreadSummary(user: AuthUser): Promise<{ channels: number; messages: number }> {
     const channels = await this.prisma.channel.findMany({
-      where: staff
-        ? { isDemo: demo }
-        : {
-            isDemo: demo,
-            // „Hromadný email" vidí len tréner družstva a vedenie (nie hráči/rodičia)
-            AND: coachAll ? [] : [{ NOT: { kind: 'TEAM_EMAIL' as const, teamId: { notIn: coachTeamIds } } }],
-            OR: [
-              { kind: 'CLUB_ANNOUNCEMENT' }, // celoklubové oznamy číta každý prihlásený
-              { members: { some: { userId: user.id } } },
-              // tréner vidí komunikáciu v každom družstve + interný kanál trénerov/vedenia
-              ...(coach
-                ? [{ teamId: { not: null } }, { kind: 'COACHES' as const }]
-                : [{ teamId: { in: relevant } }]), // hráč/rodič: kanály svojich/detských družstiev
-            ],
-          },
+      where: await this.visibleChannelWhere(user),
+      select: { id: true },
+    });
+    if (channels.length === 0) return { channels: 0, messages: 0 };
+    const reads = await this.prisma.channelRead.findMany({
+      where: { userId: user.id, channelId: { in: channels.map((c) => c.id) } },
+      select: { channelId: true, lastReadAt: true },
+    });
+    const lastRead = new Map(reads.map((r) => [r.channelId, r.lastReadAt]));
+    const rows = await this.prisma.message.findMany({
+      where: {
+        senderId: { not: user.id },
+        OR: channels.map((c) => ({ channelId: c.id, createdAt: { gt: lastRead.get(c.id) ?? new Date(0) } })),
+      },
+      select: { channelId: true },
+      take: 500,
+    });
+    return { channels: new Set(rows.map((r) => r.channelId)).size, messages: rows.length };
+  }
+
+  /** Kanály, do ktorých má používateľ prístup, zoskupené podľa družstva. */
+  async myChannels(user: AuthUser) {
+    const channels = await this.prisma.channel.findMany({
+      where: await this.visibleChannelWhere(user),
       include: {
         team: { include: { teamCategory: { select: { code: true, sortOrder: true } } } },
         messages: { orderBy: { createdAt: 'desc' }, take: 1, select: { body: true, createdAt: true } },
