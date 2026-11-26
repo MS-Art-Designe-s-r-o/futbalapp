@@ -78,7 +78,11 @@ export default function ChatScreen() {
   const [kbOpen, setKbOpen] = useState(false);
 
   useEffect(() => {
-    const show = Keyboard.addListener(Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow', () => setKbOpen(true));
+    const show = Keyboard.addListener(Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow', () => {
+      setKbOpen(true);
+      // po otvorení klávesnice zobraz posledné správy nad poľom na písanie
+      setTimeout(() => listRef.current?.scrollToEnd({ animated: true }), 120);
+    });
     const hide = Keyboard.addListener(Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide', () => setKbOpen(false));
     return () => {
       show.remove();
@@ -245,8 +249,10 @@ export default function ChatScreen() {
   return (
     <KeyboardAvoidingView
       style={styles.container}
-      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-      keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}
+      // „padding“ na oboch platformách: na Androide s edge-to-edge (SDK 54) okno pri klávesnici nemení veľkosť,
+      // takže režim „height“ nechával pole na písanie za klávesnicou
+      behavior="padding"
+      keyboardVerticalOffset={Platform.OS === 'ios' ? insets.top + 44 : 0}
     >
       {error && <Text style={styles.error}>{error}</Text>}
       <FlatList
