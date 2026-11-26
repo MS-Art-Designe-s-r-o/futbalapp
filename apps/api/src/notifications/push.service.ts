@@ -59,14 +59,16 @@ export class PushService {
           ),
         });
         const result = (await response.json()) as {
-          data?: Array<{ status: string; details?: { error?: string } }>;
+          data?: Array<{ status: string; message?: string; details?: { error?: string } }>;
         };
         const tickets = result.data ?? [];
         for (const [index, ticket] of tickets.entries()) {
           if (ticket.status === 'ok') {
             sent++;
-          } else if (ticket.details?.error === 'DeviceNotRegistered') {
-            await this.removeToken(chunk[index]!.token);
+          } else {
+            // chyba odoslania (napr. InvalidCredentials = chýba FCM/APNs kľúč, MessageRateExceeded…)
+            this.logger.warn(`Expo push odmietnutý (${chunk[index]!.platform}): ${ticket.details?.error ?? ticket.status} — ${ticket.message ?? ''}`);
+            if (ticket.details?.error === 'DeviceNotRegistered') await this.removeToken(chunk[index]!.token);
           }
         }
       } catch (error) {
