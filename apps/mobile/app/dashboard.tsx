@@ -88,6 +88,7 @@ export default function DashboardScreen() {
 
   // neprečítaná komunikácia — červená značka pri „Kanály“ ešte pred otvorením (obnova pri návrate a každú minútu)
   const [unreadChat, setUnreadChat] = useState(0);
+  const [unseenNews, setUnseenNews] = useState(0);
   useFocusEffect(
     useCallback(() => {
       let alive = true;
@@ -95,8 +96,16 @@ export default function DashboardScreen() {
         api<{ channels: number; messages: number }>('/chat/unread')
           .then((u) => alive && setUnreadChat(u.messages))
           .catch(() => {});
+      const refreshNews = () =>
+        api<{ count: number }>('/app-news/unseen-count')
+          .then((u) => alive && setUnseenNews(u.count))
+          .catch(() => {});
       void refresh();
-      const timer = setInterval(refresh, 60_000);
+      void refreshNews();
+      const timer = setInterval(() => {
+        void refresh();
+        void refreshNews();
+      }, 60_000);
       return () => {
         alive = false;
         clearInterval(timer);
@@ -256,6 +265,14 @@ export default function DashboardScreen() {
           {unreadChat > 0 && (
             <View style={styles.chatBadge} accessibilityLabel={`Neprečítané správy: ${unreadChat}`}>
               <Text style={styles.chatBadgeText}>{unreadChat > 99 ? '99+' : unreadChat}</Text>
+            </View>
+          )}
+        </Pressable>
+        <Pressable style={[styles.topBtn, styles.topBtnDark]} onPress={() => router.push('/news')}>
+          <Text style={styles.topBtnText}>🆕 Novinky</Text>
+          {unseenNews > 0 && (
+            <View style={styles.chatBadge} accessibilityLabel={`Nové novinky: ${unseenNews}`}>
+              <Text style={styles.chatBadgeText}>{unseenNews}</Text>
             </View>
           )}
         </Pressable>

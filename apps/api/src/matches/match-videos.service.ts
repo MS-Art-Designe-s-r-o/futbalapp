@@ -124,6 +124,7 @@ export class MatchVideosService implements OnModuleInit {
     const known = new Set([
       ...(await this.prisma.matchVideo.findMany({ select: { storagePath: true } })).map((v) => v.storagePath),
       ...(await this.prisma.eventVideo.findMany({ select: { storagePath: true } })).map((v) => v.storagePath),
+      ...(await this.prisma.appNews.findMany({ where: { videoStoragePath: { not: null } }, select: { videoStoragePath: true } })).map((v) => v.videoStoragePath!),
     ]);
     const cutoff = Date.now() - 6 * 3600 * 1000;
     let removed = 0;

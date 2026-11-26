@@ -48,6 +48,7 @@ model User {
   lineupComments MatchLineupComment[]
   nominationRequestsMade    NominationRequest[] @relation("NominationRequestRequestedBy")
   nominationRequestsDecided NominationRequest[] @relation("NominationRequestDecidedBy")
+  newsViews AppNewsView[]
 }
 
 model PushToken {
@@ -1333,4 +1334,40 @@ enum MatchTimerPhase {
   HALF_TIME
   SECOND_HALF
   FINISHED
+}
+
+/// Novinky v aplikáciách a portáli (napr. video o novinkách) — zverejňuje len admin, vidia ich všetci prihlásení.
+model AppNews {
+  id               String    @id @default(cuid())
+  title            String
+  body             String?
+  /// externý odkaz na video (YouTube, Veo…)
+  videoUrl         String?
+  /// nahraté video: súbor v UPLOADS_DIR/videos, metadáta tu
+  videoStoragePath String?   @unique
+  videoMimeType    String?
+  videoSize        Int?
+  videoFilename    String?
+  createdById      String?
+  createdAt        DateTime  @default(now())
+  /// null = koncept (vidí len admin)
+  publishedAt      DateTime?
+
+  views            AppNewsView[]
+
+  @@index([publishedAt])
+}
+
+/// Kto už novinku videl (na značku „Nové“ a štatistiku zobrazení).
+model AppNewsView {
+  id     String   @id @default(cuid())
+  newsId String
+  userId String
+  seenAt DateTime @default(now())
+
+  news   AppNews  @relation(fields: [newsId], references: [id], onDelete: Cascade)
+  user   User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([newsId, userId])
+  @@index([userId])
 }

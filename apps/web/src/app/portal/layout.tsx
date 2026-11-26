@@ -40,6 +40,7 @@ const navigation: Entry[] = [
   { kind: 'leaf', href: '/portal/prehlady', label: 'Štatistiky', show: ({ manage, gkOnly }) => manage && !gkOnly },
   { kind: 'leaf', href: '/portal/ulohy', label: 'Úlohy', show: ({ manage, gkOnly }) => manage && !gkOnly },
   { kind: 'leaf', href: '/portal/chat', label: 'Komunikácia', show: () => true },
+  { kind: 'leaf', href: '/portal/novinky', label: 'Novinky', show: () => true },
   { kind: 'leaf', href: '/portal/pomoc', label: 'Pomoc', show: () => true },
   { kind: 'leaf', href: '/portal/video', label: 'Videá zo zápasov', show: ({ manage }) => manage },
 ];
@@ -50,6 +51,7 @@ export default function PortalLayout({ children }: { children: React.ReactNode }
   const { me } = useMe();
   const [pendingRegs, setPendingRegs] = useState(0);
   const [unreadChat, setUnreadChat] = useState({ channels: 0, messages: 0 });
+  const [unseenNews, setUnseenNews] = useState(0);
   const [openGroup, setOpenGroup] = useState<string | null>(null);
 
   useEffect(() => {
@@ -81,6 +83,25 @@ export default function PortalLayout({ children }: { children: React.ReactNode }
       alive = false;
       clearInterval(timer);
       window.removeEventListener('fkknv:chat-read', load);
+    };
+  }, [me, pathname]);
+
+  // nové (nevidené) novinky — značka pri „Novinky“ v menu
+  useEffect(() => {
+    if (!me) return;
+    let alive = true;
+    const load = () =>
+      api<{ count: number }>('/app-news/unseen-count')
+        .then((u) => alive && setUnseenNews(u.count))
+        .catch(() => {});
+    void load();
+    const timer = setInterval(load, 120_000);
+    const onSeen = () => alive && setUnseenNews(0);
+    window.addEventListener('fkknv:news-seen', onSeen);
+    return () => {
+      alive = false;
+      clearInterval(timer);
+      window.removeEventListener('fkknv:news-seen', onSeen);
     };
   }, [me, pathname]);
 
@@ -123,7 +144,12 @@ export default function PortalLayout({ children }: { children: React.ReactNode }
                       href={entry.href}
                       className={`${flatCls(isActive(entry.href))} ${entry.href === '/portal/chat' && unreadChat.messages > 0 ? 'inline-flex items-center' : ''}`}
                     >
-                      {entry.href === '/portal/chat' && unreadChat.messages > 0 ? (
+                      {entry.href === '/portal/novinky' && unseenNews > 0 ? (
+                        <span className="inline-flex items-center gap-1.5" title={`Nové novinky: ${unseenNews}`}>
+                          {entry.label}
+                          <span className="rounded-full bg-red-500 px-1.5 text-[11px] font-bold leading-4 text-white">{unseenNews}</span>
+                        </span>
+                      ) : entry.href === '/portal/chat' && unreadChat.messages > 0 ? (
                         <span
                           className="inline-flex items-center gap-1.5"
                           title={`Neprečítané správy: ${unreadChat.messages} v ${unreadChat.channels} kanáloch`}

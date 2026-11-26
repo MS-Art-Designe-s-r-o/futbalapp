@@ -16,9 +16,10 @@ export default function RootLayout() {
   // otvorenie príslušnej obrazovky po klepnutí na notifikáciu
   useEffect(() => {
     const sub = Notifications.addNotificationResponseReceivedListener((response) => {
-      const data = response.notification.request.content.data as { type?: string; channelId?: string };
+      const data = response.notification.request.content.data as { type?: string; channelId?: string; newsId?: string };
       if (data?.type === 'task') router.push('/tasks');
       else if (data?.type === 'chat' && data.channelId) router.push(`/chat/${data.channelId}`);
+      else if (data?.type === 'news') router.push('/news');
     });
     return () => sub.remove();
   }, [router]);
@@ -47,6 +48,7 @@ export default function RootLayout() {
         <Stack.Screen name="tournament/[id]" options={{ title: 'Turnaj' }} />
         <Stack.Screen name="matches/played" options={{ title: 'Odohrané zápasy' }} />
         <Stack.Screen name="chat/index" options={{ title: 'Kanály' }} />
+        <Stack.Screen name="news/index" options={{ title: 'Novinky' }} />
         <Stack.Screen name="chat/[id]" options={{ title: 'Chat' }} />
       </Stack>
     </>
