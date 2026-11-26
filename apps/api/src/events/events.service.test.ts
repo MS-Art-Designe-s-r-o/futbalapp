@@ -12,6 +12,7 @@ function make() {
     teamMembership: { findMany: vi.fn(async () => []) },
     event: {
       findMany: vi.fn(async () => []),
+      findFirst: vi.fn(async () => null),
       findUnique: vi.fn(async () => ({ id: 'e1', teamId: null, type: 'OTHER', pitchId: null, startAt: new Date('2030-01-01T10:00:00Z'), endAt: new Date('2030-01-01T11:00:00Z') })),
       create: vi.fn(async ({ data }: { data: Record<string, unknown> }) => ({ id: 'e1', ...data })),
       update: vi.fn(async ({ data }: { data: Record<string, unknown> }) => ({ id: 'e1', startAt: new Date('2030-01-01T10:00:00Z'), endAt: new Date('2030-01-01T11:00:00Z'), ...data })),

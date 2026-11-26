@@ -98,6 +98,7 @@ function makeTournaments(
     club: reg.club,
     event: {
       findUnique: vi.fn(async () => t),
+      findFirst: vi.fn(async () => null),
       create: vi.fn(async ({ data }: { data: Record<string, unknown> }) => ({ id: 'ev-new', ...data, match: { id: 'm-new' } })),
       update: vi.fn(async () => ({})),
       delete: vi.fn(async () => ({})),
@@ -147,7 +148,7 @@ describe('vytvorenie turnaja a priateľského zápasu (POST /events)', () => {
       team: { findUnique: vi.fn(async () => ({ id: 't1' })) },
       pitch: { findUnique: vi.fn(async () => null) },
       club: reg.club,
-      event: { create: vi.fn(async ({ data }: { data: Record<string, unknown> }) => ({ id: 'e1', ...data })) },
+      event: { findFirst: vi.fn(async () => null), create: vi.fn(async ({ data }: { data: Record<string, unknown> }) => ({ id: 'e1', ...data })) },
       tournamentParticipant: { createMany: vi.fn(async () => ({ count: 2 })) },
     };
     return { prisma, reg, service: new EventsService(prisma as never, reg.clubs as never, {} as never) };

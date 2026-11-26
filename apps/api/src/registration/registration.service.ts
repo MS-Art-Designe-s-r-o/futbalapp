@@ -4,6 +4,7 @@ import { parseRodneCislo, type RegistrationInfoInput, type RegistrationRequestIn
 import { EmailService } from '../notifications/email.service';
 import { PushService } from '../notifications/push.service';
 import { buildInfoRequestEmail } from './info-request-email';
+import { buildNewRegistrationEmail } from './registration-notify-email';
 import { PrismaService } from '../prisma/prisma.service';
 import { SeasonsService } from '../seasons/seasons.service';
 import { AccountsService } from '../auth/accounts.service';
@@ -68,8 +69,23 @@ export class RegistrationService {
       ...parent,
     };
 
+    const parentName = input.parent ? `${input.parent.firstName} ${input.parent.lastName}`.trim() : null;
+    const summary = (players: Array<{ name: string; birthDate: string | null }>, extra: { playerEmail?: string | null; parentChildrenNote?: string | null } = {}) => ({
+      applicantType: input.applicantType,
+      players,
+      parentName,
+      parentEmail: input.parent?.email.toLowerCase() ?? null,
+      parentPhone: input.parent?.phone ?? null,
+      note: input.note ?? null,
+      ...extra,
+    });
+
     if (input.applicantType === 'ADULT') {
-      await this.prisma.registrationRequest.create({ data: { ...common, ...playerData(input.player) } });
+      const data = playerData(input.player);
+      await this.prisma.registrationRequest.create({ data: { ...common, ...data } });
+      void this.notifyNewRegistration(
+        summary([{ name: `${data.childFirstName} ${data.childLastName}`, birthDate: data.childBirthDate?.toISOString().slice(0, 10) ?? null }], { playerEmail: data.playerEmail }),
+      );
       return { created: 1 };
     }
 
@@ -77,15 +93,36 @@ export class RegistrationService {
       await this.prisma.registrationRequest.create({
         data: { ...common, parentChildrenNote: input.existingChildrenNote },
       });
+      void this.notifyNewRegistration(summary([], { parentChildrenNote: input.existingChildrenNote ?? null }));
       return { created: 1 };
     }
 
     // CHILD — jedna prihláška na každé dieťa
     const children = input.children ?? [];
-    await this.prisma.$transaction(
-      children.map((child) => this.prisma.registrationRequest.create({ data: { ...common, ...playerData(child) } })),
+    const childData = children.map((child) => playerData(child));
+    await this.prisma.$transaction(childData.map((data) => this.prisma.registrationRequest.create({ data: { ...common, ...data } })));
+    void this.notifyNewRegistration(
+      summary(childData.map((d) => ({ name: `${d.childFirstName} ${d.childLastName}`, birthDate: d.childBirthDate?.toISOString().slice(0, 10) ?? null }))),
     );
     return { created: children.length };
+  }
+
+  /**
+   * Upozorní klub e-mailom (predvolene info@fkknv.sk, prepísateľné REGISTRATION_NOTIFY_EMAIL)
+   * na novú prihlášku. Best-effort — chyba e-mailu nikdy nezhodí registráciu.
+   */
+  private async notifyNewRegistration(summary: Parameters<typeof buildNewRegistrationEmail>[0]) {
+    try {
+      const to = (process.env.REGISTRATION_NOTIFY_EMAIL ?? 'info@fkknv.sk')
+        .split(',')
+        .map((x) => x.trim())
+        .filter(Boolean);
+      const { subject, html } = buildNewRegistrationEmail(summary, 'https://fkknv.sk/portal/registracie');
+      const res = await this.email.send(to, subject, html, summary.parentEmail ?? undefined);
+      if (!res.sent) this.logger.warn(`Notifikačný e-mail o novej registrácii sa neodoslal: ${res.reason ?? ''}`);
+    } catch (e) {
+      this.logger.warn(`Notifikačný e-mail o novej registrácii zlyhal: ${e instanceof Error ? e.message : e}`);
+    }
   }
 
   async listPending() {
