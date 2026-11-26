@@ -21,7 +21,8 @@ export function KeyboardScreen({
   return (
     <KeyboardAvoidingView
       style={{ flex: 1, backgroundColor: ui.bg }}
-      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      // „padding“ aj na Androide: s edge-to-edge (SDK 54) okno pri klávesnici nemení veľkosť, „height“ nepomáha
+      behavior="padding"
       keyboardVerticalOffset={Platform.OS === 'ios' ? insets.top + 44 : 0}
     >
       <ScrollView

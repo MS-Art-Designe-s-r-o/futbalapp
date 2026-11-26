@@ -316,7 +316,7 @@ function CommentsPane({ task, onClose }: { task: Task; onClose: () => void }) {
   return (
     <KeyboardAvoidingView
       style={[styles.container, { paddingBottom: insets.bottom + 8 }]}
-      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      behavior="padding"
     >
       <View style={styles.commentsHeader}>
         <Text style={styles.commentsTitle} numberOfLines={1}>

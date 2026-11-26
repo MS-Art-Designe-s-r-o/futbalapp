@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Alert, Linking, Pressable, RefreshControl, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Alert, Linking, Pressable, RefreshControl, StyleSheet, Text, TextInput, View } from 'react-native';
+import { KeyboardScreen } from '@/KeyboardScreen';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { formatEventDateTimeSk, positionsShort as posText } from '@fkknv/shared';
 import { api } from '@/api';
@@ -237,7 +238,7 @@ export default function TournamentScreen() {
   const { event } = t;
   const inputProps = { placeholderTextColor: ui.placeholder, keyboardAppearance: 'dark' as const };
   return (
-    <ScrollView
+    <KeyboardScreen
       style={styles.container}
       contentContainerStyle={{ padding: 16, paddingBottom: 32 }}
       refreshControl={
@@ -425,7 +426,7 @@ export default function TournamentScreen() {
           ))}
         </>
       )}
-    </ScrollView>
+    </KeyboardScreen>
   );
 }
 
