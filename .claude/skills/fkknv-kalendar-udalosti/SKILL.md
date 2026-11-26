@@ -17,7 +17,7 @@ Kód: `apps/api/src/events/events.service.ts` (+controller), `apps/api/src/pitch
 `teamIds` v `createEventSchema` / `createRecurringTrainingSchema` (`teamId` = prvé). Pre každé družstvo vznikne vlastná udalosť (vlastná dochádzka, séria `recurrenceGroupId`, e-maily). Kontrola plochy prebehne raz → družstvá sa môžu deliť o plochu v rovnakom čase. Tréner smie len svoje družstvá.
 
 ## E-mail pri zmene termínu
-`EventsService.update` → `notifyRescheduled` pri zmene `startAt`/`endAt` budúcej udalosti: tréning → hráči družstva + rodičia + tréneri; zápas/turnaj → nominovaní (bez REMOVED) + rodičia + tréneri. Chyba odoslania neblokuje uloženie. Zmena termínu zápasu zo synchronizácie z futbalnetu e-mail NEposiela.
+`EventsService.update` → `notifyRescheduled` pri zmene `startAt`/`endAt` budúcej udalosti: tréning → hráči družstva + rodičia + tréneri; zápas/turnaj → nominovaní (bez REMOVED) + rodičia + tréneri; rodičovské združenie → hráči cieľových družstiev (prázdny cieľ = celý klub) + rodičia + tréneri. Chyba odoslania neblokuje uloženie. Zmena termínu zápasu zo synchronizácie z futbalnetu e-mail NEposiela.
 
 ## Poznámky
 - Detail zápasu má zvýraznenú adresu a mapu predvolene otvorenú (`MapEmbed defaultOpen`); inde sa mapa načíta po kliknutí.

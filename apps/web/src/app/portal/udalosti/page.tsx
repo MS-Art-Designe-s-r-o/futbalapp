@@ -21,7 +21,8 @@ import { ClubPicker } from '@/components/club-picker';
 import { MediaBadge } from '@/components/video-icon';
 import { ParentMeetingIcon, TrainingIcon, trainingLabel } from '@/components/training-icon';
 import { JerseyBadges, JerseyIcon, JerseyPicker, type JerseyColor } from '@/components/jersey';
-import { AddressField, PitchPicker } from '@/components/pitch-picker';
+import { PitchPicker } from '@/components/pitch-picker';
+import { ParentMeetingModal } from '@/components/parent-meeting-modal';
 
 interface Team {
   id: string;
@@ -98,13 +99,12 @@ const typeLabels: Record<string, string> = {
 /**
  * Odkaz na detail udalosti; `null` = detail sa neotvára.
  * Zápas otvorí každý, kto ho vidí; detail tréningu (dochádzku) len vedenie klubu
- * a tréner daného družstva. Rodičovské združenie a celoklubové podujatia nemajú
- * detail (všetky info sú na karte).
+ * a tréner daného družstva. Rodičovské združenie má vlastný detail (úprava/odstránenie).
  */
 function eventHref(me: Me | null, e: EventItem): string | null {
   if (e.type === 'TOURNAMENT') return `/portal/turnaje/${e.id}`;
   if (e.match) return `/portal/zapasy/${e.match.id}`;
-  if (e.type === 'PARENT_MEETING') return null;
+  if (e.type === 'PARENT_MEETING') return `/portal/rodicovske/${e.id}`;
   return canManageTeam(me, e.team?.id) ? `/portal/dochadzka/${e.id}` : null;
 }
 
@@ -416,6 +416,7 @@ export default function EventsPage() {
           events={events}
           pitchOccupancy={pitchFilter ? occupancy.filter((o) => o.pitchId === pitchFilter) : null}
           onDayClick={canManage(me) ? setDayOpen : undefined}
+         
         />
       )}
 
@@ -429,6 +430,10 @@ export default function EventsPage() {
         onPick={(kind) => {
           setInitialDate(dayOpen ?? '');
           setDayOpen(null);
+          if (kind === 'meeting') {
+            setMeetingOpen(true);
+            return;
+          }
           if (kind === 'training' || kind === 'gk') {
             setGkTraining(kind === 'gk');
             setTrainingOpen(true);
@@ -467,11 +472,16 @@ export default function EventsPage() {
       />
       <ParentMeetingModal
         open={meetingOpen}
-        onClose={() => setMeetingOpen(false)}
+        initialDate={initialDate}
+        onClose={() => {
+          setMeetingOpen(false);
+          setInitialDate('');
+        }}
         teams={regularTeams}
         canWholeClub={isStaff(me)}
         onDone={() => {
           setMeetingOpen(false);
+          setInitialDate('');
           void load();
         }}
       />
@@ -732,7 +742,7 @@ function MonthView({
                           <div
                             key={e.id}
                             title={`${time}${e.endAt ? `–${formatEventTimeSk(e.endAt)}` : ''} · ${label}`}
-                            className={`flex items-center gap-1 truncate rounded-sm py-0.5 pl-1.5 pr-1 text-[11px] leading-snug hover:brightness-125 ${
+                            className={`flex items-center gap-1 truncate  rounded-sm py-0.5 pl-1.5 pr-1 text-[11px] leading-snug hover:brightness-125 ${
                               e.match ? 'font-semibold' : 'opacity-80'
                             }`}
                             style={{ backgroundColor: c.bg, color: c.text, borderLeft: `3px solid ${c.text}` }}
@@ -767,7 +777,7 @@ function DayModal({
   pitches: Pitch[];
   occupancy: Occupancy[];
   onClose: () => void;
-  onPick: (kind: 'training' | 'gk' | 'match') => void;
+  onPick: (kind: 'training' | 'gk' | 'match' | 'meeting') => void;
   showRegular: boolean;
   showGk: boolean;
 }) {
@@ -815,6 +825,11 @@ function DayModal({
           {showGk && (
             <Button variant="ghost" onClick={() => onPick('gk')}>
               + Tréning brankárov
+            </Button>
+          )}
+          {showRegular && (
+            <Button variant="ghost" onClick={() => onPick('meeting')}>
+              + Rodičovské
             </Button>
           )}
           {showRegular && <Button onClick={() => onPick('match')}>+ Zápas</Button>}
@@ -1274,124 +1289,6 @@ function MatchModal({
             Zrušiť
           </Button>
           <Button onClick={submit} disabled={busy || !teamId || (type !== 'TOURNAMENT' && !opponent) || !date || endInvalid || endMissing}>
-            {busy ? 'Ukladám…' : 'Vytvoriť'}
-          </Button>
-        </div>
-      </div>
-    </Modal>
-  );
-}
-
-/** Rodičovské združenie: pre vybrané družstvá alebo celý klub. */
-function ParentMeetingModal({
-  open,
-  onClose,
-  teams,
-  canWholeClub,
-  onDone,
-}: {
-  open: boolean;
-  onClose: () => void;
-  teams: Team[];
-  canWholeClub: boolean;
-  onDone: () => void;
-}) {
-  const [title, setTitle] = useState('Rodičovské združenie');
-  const [wholeClub, setWholeClub] = useState(false);
-  const [teamIds, setTeamIds] = useState<string[]>([]);
-  const [date, setDate] = useState('');
-  const [time, setTime] = useState('17:00');
-  const [location, setLocation] = useState('');
-  const [address, setAddress] = useState('');
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  // tréner nemôže robiť celoklubové združenie
-  useEffect(() => {
-    if (!canWholeClub && wholeClub) setWholeClub(false);
-  }, [canWholeClub, wholeClub]);
-
-  function toggleTeam(id: string) {
-    setTeamIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
-  }
-
-  async function submit() {
-    setBusy(true);
-    setError(null);
-    try {
-      await api('/events', {
-        method: 'POST',
-        body: JSON.stringify({
-          type: 'PARENT_MEETING',
-          title,
-          startAt: `${date}T${time}:00.000Z`,
-          location: location || undefined,
-          address: address.trim() || undefined,
-          audienceTeamIds: wholeClub ? [] : teamIds,
-        }),
-      });
-      onDone();
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Uloženie zlyhalo');
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  const valid = !!date && (wholeClub || teamIds.length > 0);
-
-  return (
-    <Modal open={open} onClose={onClose} title="Nové rodičovské združenie">
-      <div className="space-y-4">
-        <div>
-          <label className={labelCls}>Názov</label>
-          <input value={title} onChange={(e) => setTitle(e.target.value)} className={inputCls} />
-        </div>
-
-        <div>
-          <label className={labelCls}>Pre koho</label>
-          {canWholeClub && (
-            <label className="mb-2 flex items-center gap-2 text-sm text-gray-700">
-              <input type="checkbox" checked={wholeClub} onChange={(e) => setWholeClub(e.target.checked)} />
-              Celý klub (všetky družstvá)
-            </label>
-          )}
-          {!wholeClub && (
-            <div className="grid max-h-40 grid-cols-2 gap-1 overflow-y-auto rounded-md border border-gray-200 p-2">
-              {teams.map((t) => (
-                <label key={t.id} className="flex items-center gap-2 text-sm text-gray-700">
-                  <input type="checkbox" checked={teamIds.includes(t.id)} onChange={() => toggleTeam(t.id)} />
-                  {t.name}
-                </label>
-              ))}
-              {teams.length === 0 && <p className="text-sm text-gray-400">Žiadne družstvá.</p>}
-            </div>
-          )}
-          <p className="mt-1 text-xs text-gray-500">Vyberte jedno či viac družstiev, alebo celý klub.</p>
-        </div>
-
-        <div className="grid grid-cols-2 gap-3">
-          <div>
-            <label className={labelCls}>Dátum</label>
-            <input type="date" value={date} onChange={(e) => setDate(e.target.value)} className={inputCls} />
-          </div>
-          <div>
-            <label className={labelCls}>Čas</label>
-            <input type="time" value={time} onChange={(e) => setTime(e.target.value)} className={inputCls} />
-          </div>
-        </div>
-        <div>
-          <label className={labelCls}>Miesto</label>
-          <input value={location} onChange={(e) => setLocation(e.target.value)} className={inputCls} list="venue-list" placeholder="Klubovňa / ihrisko KNV" />
-        </div>
-        <AddressField value={address} onChange={setAddress} />
-
-        <ErrorText>{error}</ErrorText>
-        <div className="flex justify-end gap-2">
-          <Button variant="ghost" onClick={onClose}>
-            Zrušiť
-          </Button>
-          <Button onClick={submit} disabled={busy || !valid}>
             {busy ? 'Ukladám…' : 'Vytvoriť'}
           </Button>
         </div>

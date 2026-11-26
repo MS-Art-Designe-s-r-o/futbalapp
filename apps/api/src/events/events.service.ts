@@ -327,6 +327,89 @@ export class EventsService {
     return !!team?.isGoalkeeperGroup;
   }
 
+  /** Úprava/zmazanie udalosti: družstvová → tréner družstva; rodičovské združenie → tréner všetkých cieľových družstiev; celoklubové → vedenie. */
+  async canManageEvent(user: AuthUser, event: { id: string; teamId: string | null; type: string }): Promise<boolean> {
+    if (event.teamId) return this.canManage(user, event.teamId);
+    if (event.type === 'PARENT_MEETING') {
+      const audience = await this.prisma.team.findMany({ where: { audienceEvents: { some: { id: event.id } } }, select: { id: true } });
+      if (audience.length > 0) {
+        for (const t of audience) if (!(await this.canManage(user, t.id))) return false;
+        return true;
+      }
+    }
+    return this.canManage(user, null);
+  }
+
+  /**
+   * Zabráni duplicitnej udalosti pre tú istú skupinu:
+   *  - rodičovské združenie: v ten istý deň nesmú byť dve pre rovnaké družstvo (celoklubové koliduje s každým);
+   *  - tréning/zápas: rovnaké družstvo, rovnaký typ a presne rovnaký začiatok.
+   */
+  /** Popis existujúcej udalosti pre hlášku: kde (termín, miesto, družstvo) a kto ju vytvoril. */
+  private async describeExisting(o: {
+    title: string;
+    startAt: Date;
+    location: string | null;
+    createdById: string | null;
+    team?: { name: string } | null;
+    audienceTeams?: Array<{ name: string }>;
+  }): Promise<string> {
+    const u = o.createdById
+      ? await this.prisma.user.findUnique({ where: { id: o.createdById }, select: { firstName: true, lastName: true } })
+      : null;
+    const groups = o.audienceTeams?.length ? o.audienceTeams.map((t) => t.name).join(', ') : o.team?.name ?? 'celý klub';
+    return `„${o.title}“ — kalendár: ${formatEventDateTimeSk(o.startAt)}, ${o.location ? `miesto: ${o.location}, ` : ''}pre: ${groups}; vytvoril/a: ${u ? `${u.firstName} ${u.lastName}` : 'neznámy používateľ (alebo import)'}`;
+  }
+
+  private async assertNoDuplicate(
+    e: { type: string; teamId?: string | null; audienceTeamIds: string[]; startAt: Date },
+    excludeId?: string,
+  ) {
+    if (e.type === 'PARENT_MEETING') {
+      const dayStart = new Date(Date.UTC(e.startAt.getUTCFullYear(), e.startAt.getUTCMonth(), e.startAt.getUTCDate()));
+      const dayEnd = new Date(dayStart.getTime() + 24 * 3600 * 1000);
+      const same = await this.prisma.event.findMany({
+        where: { type: 'PARENT_MEETING', startAt: { gte: dayStart, lt: dayEnd }, ...(excludeId ? { id: { not: excludeId } } : {}) },
+        select: {
+          teamId: true,
+          title: true,
+          startAt: true,
+          location: true,
+          createdById: true,
+          team: { select: { name: true } },
+          audienceTeams: { select: { id: true, name: true } },
+        },
+      });
+      const mine = new Set([...e.audienceTeamIds, ...(e.teamId ? [e.teamId] : [])]);
+      const clubWide = mine.size === 0;
+      for (const o of same) {
+        const theirs = new Set([...o.audienceTeams.map((t) => t.id), ...(o.teamId ? [o.teamId] : [])]);
+        const shared = o.audienceTeams.filter((t) => mine.has(t.id)).map((t) => t.name);
+        if (clubWide || theirs.size === 0 || shared.length > 0 || (o.teamId && mine.has(o.teamId))) {
+          throw new BadRequestException(
+            `Takéto rodičovské združenie už existuje a nedá sa vytvoriť znova: ${await this.describeExisting(o)}. Upravte existujúce alebo vyberte iný deň.`,
+          );
+        }
+      }
+      return;
+    }
+    if ((e.type === 'TRAINING' || e.type === 'MATCH') && e.teamId) {
+      const dup = await this.prisma.event.findFirst({
+        where: { type: e.type as 'TRAINING' | 'MATCH', teamId: e.teamId, startAt: e.startAt, parentEventId: null, ...(excludeId ? { id: { not: excludeId } } : {}) },
+        select: { title: true, startAt: true, location: true, createdById: true, team: { select: { name: true } } },
+      });
+      if (dup) {
+        throw new BadRequestException(`Takáto udalosť už existuje a nedá sa vytvoriť znova: ${await this.describeExisting(dup)}.`);
+      }
+    }
+  }
+
+  async getMeeting(eventId: string) {
+    const e = await this.prisma.event.findUnique({ where: { id: eventId }, include: EVENT_INCLUDE });
+    if (!e || e.type !== 'PARENT_MEETING') throw new NotFoundException('Udalosť neexistuje');
+    return e;
+  }
+
   async assertGkTeamsOnlyTraining(user: AuthUser, type: string, teamIds: Array<string | undefined | null>) {
     if (isStaff(user) || type === 'TRAINING') return;
     const ids = [...new Set(teamIds.filter((x): x is string => !!x))];
@@ -369,6 +452,7 @@ export class EventsService {
     const legacyTournament = input.type === 'TOURNAMENT' && !!input.opponent?.trim() && !input.participants?.length;
     const isMatch = input.type === 'MATCH' || legacyTournament;
     if (input.type === 'TOURNAMENT' && !legacyTournament && !team) throw new BadRequestException('Vyberte družstvo turnaja');
+    await this.assertNoDuplicate({ type: input.type, teamId: team?.id, audienceTeamIds: [...new Set(input.audienceTeamIds ?? [])], startAt: input.startAt });
     const pitch = await this.resolvePitch(input.pitchId);
     this.assertEndAfterStart(input.startAt, input.endAt, !!pitch);
     const slots = [{ startAt: input.startAt, endAt: input.endAt }];
@@ -513,7 +597,12 @@ export class EventsService {
   async update(eventId: string, input: Partial<CreateEventInput>, user: AuthUser) {
     const event = await this.prisma.event.findUnique({ where: { id: eventId } });
     if (!event) throw new NotFoundException('Udalosť neexistuje');
-    if (!(await this.canManage(user, event.teamId))) throw new ForbiddenException('Túto udalosť nemôžete upravovať');
+    if (!(await this.canManageEvent(user, event))) throw new ForbiddenException('Túto udalosť nemôžete upravovať');
+    if (input.audienceTeamIds && event.type === 'PARENT_MEETING') {
+      const ids = [...new Set(input.audienceTeamIds)];
+      if (ids.length === 0 && !isStaff(user)) throw new ForbiddenException('Celoklubovú udalosť môže upraviť len vedenie klubu');
+      for (const id of ids) if (!(await this.canManage(user, id))) throw new ForbiddenException('Nemôžete nastaviť iné družstvo');
+    }
     // zmena typu tréningu: futbalový ↔ brankársky = prepnutie družstva udalosti
     // (bežné družstvo ↔ skupina „… Brankári“ rovnakej kategórie alebo „Brankári (všetci)“)
     let newTeamId: string | undefined;
@@ -539,6 +628,14 @@ export class EventsService {
     const pitch = await this.resolvePitch(input.pitchId);
     const effectivePitchId = pitch ? pitch.id : input.pitchId === undefined ? event.pitchId : null;
     const newStart = input.startAt ?? event.startAt;
+    if (input.startAt || input.audienceTeamIds) {
+      const audienceIds =
+        input.audienceTeamIds ??
+        (event.type === 'PARENT_MEETING'
+          ? (await this.prisma.team.findMany({ where: { audienceEvents: { some: { id: eventId } } }, select: { id: true } })).map((t) => t.id)
+          : []);
+      await this.assertNoDuplicate({ type: event.type, teamId: newTeamId ?? event.teamId, audienceTeamIds: audienceIds, startAt: newStart }, eventId);
+    }
     const newEnd = input.endAt ?? event.endAt;
     // starý klient mení len začiatok → koniec sa nesmie ocitnúť pred novým začiatkom
     if (input.startAt && !input.endAt && newEnd && newEnd.getTime() <= newStart.getTime()) {
@@ -571,6 +668,11 @@ export class EventsService {
         pitchId: pitch ? pitch.id : undefined,
         // verejnosť len pre tréning; pri iných typoch ignoruj
         isPublic: event.type === 'TRAINING' ? input.isPublic : undefined,
+        // rodičovské združenie: zmena cieľových družstiev (prázdne = celý klub)
+        audienceTeams:
+          event.type === 'PARENT_MEETING' && input.audienceTeamIds
+            ? { set: [...new Set(input.audienceTeamIds)].map((id) => ({ id })) }
+            : undefined,
       },
     });
     if (newTeamId) {
@@ -611,9 +713,11 @@ export class EventsService {
     before: { startAt: Date; endAt: Date | null; type: string; teamId: string | null },
     after: { id: string; startAt: Date; endAt: Date | null; type: string; teamId: string | null; title: string; location: string | null },
   ) {
-    if (!after.teamId || after.startAt.getTime() < Date.now()) return;
+    if (after.startAt.getTime() < Date.now()) return;
+    const isMeeting = after.type === 'PARENT_MEETING';
+    if (!after.teamId && !isMeeting) return;
     const isMatch = after.type === 'MATCH' || after.type === 'TOURNAMENT';
-    if (!isMatch && after.type !== 'TRAINING') return;
+    if (!isMatch && !isMeeting && after.type !== 'TRAINING') return;
 
     const memberSelect = {
       user: { select: { email: true } },
@@ -621,7 +725,19 @@ export class EventsService {
     } as const;
     let members: Array<{ user: { email: string | null } | null; guardians: Array<{ user: { email: string | null } }> }>;
     let heading: string;
-    if (isMatch) {
+    let coachTeamIds: string[] = after.teamId ? [after.teamId] : [];
+    if (isMeeting) {
+      // rodičovské združenie: hráči družstiev z cieľa (prázdny cieľ = celý klub), ich rodičia a tréneri
+      const aud = await this.prisma.team.findMany({ where: { audienceEvents: { some: { id: after.id } } }, select: { id: true } });
+      const ids = aud.map((t) => t.id);
+      if (after.teamId && !ids.includes(after.teamId)) ids.push(after.teamId);
+      coachTeamIds = ids;
+      members = await this.prisma.member.findMany({
+        where: { memberships: { some: { ...(ids.length ? { teamId: { in: ids } } : {}), season: { isActive: true }, leftAt: null } } },
+        select: memberSelect,
+      });
+      heading = 'Zmena termínu rodičovského združenia';
+    } else if (isMatch) {
       const match = await this.prisma.match.findUnique({
         where: { eventId: after.id },
         select: {
@@ -632,13 +748,13 @@ export class EventsService {
       heading = 'Zmena termínu zápasu';
     } else {
       members = await this.prisma.member.findMany({
-        where: { memberships: { some: { teamId: after.teamId, season: { isActive: true }, leftAt: null } } },
+        where: { memberships: { some: { teamId: after.teamId!, season: { isActive: true }, leftAt: null } } },
         select: memberSelect,
       });
       heading = 'Zmena termínu tréningu';
     }
     const coaches = await this.prisma.userRole.findMany({
-      where: { role: 'COACH', teamId: after.teamId },
+      where: { role: 'COACH', ...(isMeeting && coachTeamIds.length === 0 ? {} : { teamId: { in: coachTeamIds } }) },
       select: { user: { select: { email: true } } },
     });
 
@@ -673,7 +789,7 @@ export class EventsService {
   async remove(eventId: string, scope: 'one' | 'future', user: AuthUser) {
     const event = await this.prisma.event.findUnique({ where: { id: eventId } });
     if (!event) throw new NotFoundException('Udalosť neexistuje');
-    if (!(await this.canManage(user, event.teamId))) throw new ForbiddenException('Túto udalosť nemôžete odstrániť');
+    if (!(await this.canManageEvent(user, event))) throw new ForbiddenException('Túto udalosť nemôžete odstrániť');
     if (scope === 'future' && event.recurrenceGroupId) {
       const res = await this.prisma.event.deleteMany({
         where: { recurrenceGroupId: event.recurrenceGroupId, startAt: { gte: event.startAt } },
