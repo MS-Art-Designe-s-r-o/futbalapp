@@ -41,6 +41,7 @@ interface Tournament {
   event: {
     id: string;
     title: string;
+    logoUrl?: string | null;
     startAt: string;
     endAt: string | null;
     location: string | null;
@@ -303,7 +304,13 @@ export default function TournamentPage({ params }: { params: Promise<{ id: strin
 
       <Card>
         <p className="text-xs font-semibold uppercase tracking-widest text-gray-400">Turnaj</p>
-        <h1 className="text-2xl font-bold text-club-900">{ev.title}</h1>
+        <h1 className="flex items-center gap-3 text-2xl font-bold text-club-900">
+          {ev.logoUrl && (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={ev.logoUrl} alt="" className="h-12 w-12 shrink-0 rounded-full object-contain" />
+          )}
+          {ev.title}
+        </h1>
         <p className="mt-1 text-sm text-gray-600">
           {formatEventDateTimeSk(ev.startAt)}
           {ev.endAt ? `–${formatEventTimeSk(ev.endAt)}` : ''}

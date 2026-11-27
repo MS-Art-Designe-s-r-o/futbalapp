@@ -482,6 +482,7 @@ export class EventsService {
         teamId: team?.id,
         isDemo,
         title: input.title,
+        logoUrl: input.logoUrl ?? undefined,
         startAt: input.startAt,
         endAt: input.endAt,
         location: pitch ? pitch.name : input.location,
@@ -659,6 +660,7 @@ export class EventsService {
       where: { id: eventId },
       data: {
         title: input.title,
+        logoUrl: input.logoUrl,
         teamId: newTeamId,
         startAt: input.startAt,
         endAt: input.endAt,

@@ -21,6 +21,7 @@ interface EventItem {
   address?: string | null;
   parentEventId?: string | null;
   _count?: { photos: number; videos: number };
+  logoUrl?: string | null;
   tournamentOrder?: number | null;
   parent?: { id: string; title: string } | null;
   team: { id: string; name: string; isGoalkeeperGroup?: boolean } | null;
@@ -238,7 +239,14 @@ export default function DashboardScreen() {
             Turnaj: {item.parent.title} · {item.tournamentOrder}. zápas
           </Text>
         ) : null}
-        {item.match ? <MatchTeams item={item} /> : <Text style={styles.cardTitle}>{item.title}</Text>}
+        {item.match ? (
+          <MatchTeams item={item} />
+        ) : (
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+            {item.logoUrl ? <Image source={{ uri: item.logoUrl }} style={{ width: 36, height: 36, borderRadius: 18 }} /> : null}
+            <Text style={[styles.cardTitle, { flexShrink: 1 }]}>{item.title}</Text>
+          </View>
+        )}
         {item.match && (
           <View style={styles.meetRow}>
             <JerseyPair colors={jerseyList(item.match)} />

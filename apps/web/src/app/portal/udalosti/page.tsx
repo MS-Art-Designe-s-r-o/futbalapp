@@ -59,6 +59,7 @@ interface EventItem {
   parentEventId?: string | null;
   parent?: { id: string; title: string } | null;
   _count?: { photos: number; videos: number };
+  logoUrl?: string | null;
   tournamentOrder?: number | null;
   match: {
     isFriendly?: boolean;
@@ -544,7 +545,17 @@ function EventList({
                   {formatEventDateTimeSk(e.startAt)}
                   {e.endAt ? `–${formatEventTimeSk(e.endAt)}` : ''}
                 </div>
-                {e.match ? <MatchTeams e={e} /> : <div className="mt-1 font-medium">{e.title}</div>}
+                {e.match ? (
+                  <MatchTeams e={e} />
+                ) : (
+                  <div className="mt-1 flex items-center gap-2 font-medium">
+                    {e.logoUrl && (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img src={e.logoUrl} alt="" className="h-8 w-8 shrink-0 rounded-full object-contain" />
+                    )}
+                    {e.title}
+                  </div>
+                )}
                 {e.match && (
                   <div className="mt-1 flex items-center gap-1.5 text-xs text-gray-500">
                     <JerseyBadges colors={e.match.jerseyColors} />

@@ -673,6 +673,8 @@ enum Rsvp {
 model Event {
   id       String    @id @default(cuid())
   type     EventType
+  /// logo udalosti (napr. organizátor turnaja — Mestský futbalový zväz Košice); absolútna URL obrázka
+  logoUrl  String?
   seasonId String
   /// Testovacia (demo) udalosť — viditeľná len pre demo konto (app-store review).
   isDemo   Boolean   @default(false)

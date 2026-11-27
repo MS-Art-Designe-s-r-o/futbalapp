@@ -191,6 +191,8 @@ export const createEventSchema = z.object({
   /// cieľové družstvá (napr. rodičovské združenie pre viac družstiev naraz);
   /// prázdne = celoklubová udalosť
   audienceTeamIds: z.array(z.string()).optional(),
+  /// logo udalosti (napr. turnaja) — URL obrázka; null = odstrániť
+  logoUrl: z.string().url().max(500).nullable().optional(),
   startAt: z.coerce.date(),
   endAt: z.coerce.date().optional(),
   location: z.string().max(200).optional(),
